@@ -1,26 +1,438 @@
-@import "tailwindcss";
+/* =================================
+   🎨 Global Styles - Tailwind CSS
+   ================================= */
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* =================================
+   🌍 Global Base Styles
+   ================================= */
 
-@media (prefers-color-scheme: dark) {
+@layer base {
+  /* Custom font imports */
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+  
+  /* Root variables for consistent theming */
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Chinese-preferred colors */
+    --color-primary: #FF6B35;        /* Warm orange-red, popular in Chinese apps */
+    --color-primary-dark: #E55A2B;
+    --color-success: #FF4757;        /* Chinese red for money/success */
+    --color-wealth: #FFD700;         /* Gold for premium features */
+    --color-warning: #FFA726;
+    --color-error: #EF4444;
+    --color-info: #42A5F5;
+    --color-wechat: #07C160;         /* WeChat green */
+    --color-alipay: #1677FF;         /* Alipay blue */
+    
+    /* Chinese gradient backgrounds */
+    --gradient-warm: linear-gradient(135deg, #FF6B35 0%, #FFB347 100%);
+    --gradient-money: linear-gradient(135deg, #FFD700 0%, #FFA726 100%);
+    --gradient-success: linear-gradient(135deg, #FF4757 0%, #FF6B8A 100%);
+    
+    /* Chinese font optimization */
+    --font-chinese: var(--font-noto-sc), 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', '微软雅黑', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+  }
+
+  /* Dark mode variables */
+  .dark {
+    --color-primary: #60A5FA;
+    --color-primary-dark: #3B82F6;
+  }
+
+  /* Base element styles */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: var(--font-chinese);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Improved focus styles */
+  *:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  /* Selection colors */
+  ::selection {
+    background-color: var(--color-primary);
+    color: white;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* =================================
+   🧩 Custom Component Styles
+   ================================= */
+
+@layer components {
+  /* Chinese-style button variants */
+  .btn-primary {
+    @apply text-white font-medium px-6 py-3 rounded-full transition-all duration-300 focus:outline-none shadow-lg hover:shadow-xl transform hover:-translate-y-0.5;
+    background: var(--gradient-warm);
+    box-shadow: 0 4px 15px rgba(255, 107, 53, 0.3);
+  }
+
+  .btn-primary:hover {
+    box-shadow: 0 6px 20px rgba(255, 107, 53, 0.4);
+  }
+
+  .btn-secondary {
+    @apply bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-white font-medium px-6 py-3 rounded-full transition-all duration-300 focus:outline-none shadow-md hover:shadow-lg;
+  }
+
+  .btn-success {
+    @apply text-white font-medium px-6 py-3 rounded-full transition-all duration-300 focus:outline-none shadow-lg hover:shadow-xl;
+    background: var(--gradient-success);
+    box-shadow: 0 4px 15px rgba(255, 71, 87, 0.3);
+  }
+
+  .btn-wealth {
+    @apply text-gray-800 font-bold px-6 py-3 rounded-full transition-all duration-300 focus:outline-none shadow-lg hover:shadow-xl;
+    background: var(--gradient-money);
+    box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+  }
+
+  .btn-wechat {
+    @apply bg-green-500 hover:bg-green-600 text-white font-medium px-6 py-3 rounded-full transition-all duration-300 focus:outline-none shadow-lg;
+    background-color: var(--color-wechat);
+  }
+
+  .btn-alipay {
+    @apply text-white font-medium px-6 py-3 rounded-full transition-all duration-300 focus:outline-none shadow-lg;
+    background-color: var(--color-alipay);
+  }
+
+  .btn-danger {
+    @apply bg-red-500 hover:bg-red-600 focus:ring-red-500 text-white font-medium px-6 py-3 rounded-full transition-all duration-300 focus:outline-none shadow-lg hover:shadow-xl;
+  }
+
+  /* Chinese-style card designs */
+  .card {
+    @apply bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 transition-all duration-300 hover:shadow-lg;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  .card-padded {
+    @apply card p-6;
+  }
+
+  .card-premium {
+    @apply bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-2xl border-2 border-yellow-200 dark:border-yellow-800 transition-all duration-300;
+    box-shadow: 0 4px 20px rgba(255, 215, 0, 0.15);
+  }
+
+  .card-payment {
+    @apply bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 transition-all duration-300;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  }
+
+  .card-status {
+    @apply rounded-xl p-4 border-l-4 transition-all duration-300;
+  }
+
+  /* Input styles */
+  .input-primary {
+    @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors duration-200;
+  }
+
+  /* Chinese-style status indicators with enhanced visual feedback */
+  .status-pending {
+    @apply bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 border-l-4 border-orange-400 dark:border-orange-600 text-orange-800 dark:text-orange-200 shadow-md;
+  }
+
+  .status-processing {
+    @apply bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-l-4 border-blue-500 dark:border-blue-600 text-blue-800 dark:text-blue-200 shadow-md;
+    animation: pulse-processing 2s ease-in-out infinite;
+  }
+
+  .status-completed {
+    @apply bg-gradient-to-r from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-l-4 border-red-500 dark:border-red-600 text-red-800 dark:text-red-200 shadow-lg;
+    box-shadow: 0 4px 15px rgba(255, 71, 87, 0.2);
+  }
+
+  .status-wealth {
+    @apply bg-gradient-to-r from-yellow-100 to-yellow-50 dark:from-yellow-800/20 dark:to-yellow-900/20 border-l-4 border-yellow-500 dark:border-yellow-400 text-yellow-900 dark:text-yellow-100 shadow-lg;
+    box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+  }
+
+  .status-failed {
+    @apply bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 border-l-4 border-red-600 dark:border-red-500 text-red-800 dark:text-red-200 shadow-md;
+  }
+
+  .status-expired {
+    @apply bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-900/20 dark:to-gray-800/20 border-l-4 border-gray-400 dark:border-gray-600 text-gray-800 dark:text-gray-200;
+  }
+
+  /* WeChat & Alipay style status badges */
+  .badge-wechat {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium text-white shadow-lg;
+    background-color: var(--color-wechat);
+  }
+
+  .badge-alipay {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium text-white shadow-lg;
+    background-color: var(--color-alipay);
+  }
+}
+
+/* =================================
+   🎯 Custom Utility Classes
+   ================================= */
+
+@layer utilities {
+  /* Animation utilities */
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .animate-bounce-subtle {
+    animation: bounce 2s infinite;
+  }
+
+  /* Chinese-style gradient text */
+  .text-gradient {
+    background: var(--gradient-warm);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-money {
+    background: var(--gradient-money);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-success {
+    background: var(--gradient-success);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Scrollbar styling */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #CBD5E0 #F7FAFC;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: #F7FAFC;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #CBD5E0;
+    border-radius: 3px;
+  }
+
+  .dark .scrollbar-thin {
+    scrollbar-color: #4A5568 #2D3748;
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-track {
+    background: #2D3748;
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #4A5568;
+  }
+
+  /* Safe area handling for mobile */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* =================================
+   🌐 Internationalization Styles
+   ================================= */
+
+/* Language-specific font preferences */
+:lang(zh-CN) {
+  font-family: 'Noto Sans SC', 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+:lang(en) {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* RTL support for future expansion */
+[dir="rtl"] .rtl\:space-x-reverse > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-x-reverse: 1;
+}
+
+/* =================================
+   📱 Mobile-Specific Styles
+   ================================= */
+
+/* Touch-friendly interactive elements */
+@media (max-width: 768px) {
+  .btn-primary,
+  .btn-secondary,
+  .btn-success,
+  .btn-danger {
+    @apply px-6 py-3 text-base;
+    min-height: 44px; /* iOS recommended touch target size */
+  }
+
+  .input-primary {
+    @apply py-3 text-base;
+    min-height: 44px;
+  }
+
+  /* Larger tap targets for mobile */
+  .wallet-btn,
+  .chain-option {
+    @apply p-4;
+    min-height: 60px;
+  }
+}
+
+/* =================================
+   🎭 Animation Keyframes - Chinese Style
+   ================================= */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse-processing {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes money-glow {
+  0%, 100% {
+    box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 6px 25px rgba(255, 215, 0, 0.5);
+  }
+}
+
+@keyframes success-celebration {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Apply entrance animations */
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.5s ease-out;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.3s ease-out;
+}
+
+/* =================================
+   🔒 Security and Accessibility
+   ================================= */
+
+/* Hide content from screen readers when appropriate */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .card {
+    @apply border-2 border-gray-900 dark:border-white;
+  }
+  
+  .btn-primary {
+    @apply border-2 border-blue-900;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-spin {
+    animation: none !important;
+  }
 }
