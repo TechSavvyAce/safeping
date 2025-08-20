@@ -46,6 +46,8 @@ export default function PaymentPage() {
   );
   const [isMobile, setIsMobile] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [currentStep, setCurrentStep] = useState<
     "chain-selection" | "wallet-selection" | "payment"
   >(
@@ -125,7 +127,33 @@ export default function PaymentPage() {
       console.log("🔗 Wallet connected successfully");
     } catch (error: any) {
       console.error("❌ Wallet connection failed:", error);
-      alert(`连接失败: ${error.message}`);
+
+      // Show more helpful error messages
+      let userFriendlyMessage = error.message;
+
+      if (error.message.includes("TronLink")) {
+        if (error.message.includes("not installed")) {
+          userFriendlyMessage = "请先安装 TronLink 浏览器扩展";
+        } else if (error.message.includes("locked")) {
+          userFriendlyMessage = "TronLink 已锁定，请先解锁钱包";
+        } else if (error.message.includes("network")) {
+          userFriendlyMessage = "网络不匹配，请在 TronLink 中切换到正确的网络";
+        } else if (error.message.includes("rejected")) {
+          userFriendlyMessage = "连接被拒绝，请在 TronLink 中批准连接";
+        }
+      } else if (error.message.includes("MetaMask")) {
+        if (error.message.includes("not installed")) {
+          userFriendlyMessage = "请先安装 MetaMask 浏览器扩展";
+        } else if (error.message.includes("locked")) {
+          userFriendlyMessage = "MetaMask 已锁定，请先解锁钱包";
+        } else if (error.message.includes("rejected")) {
+          userFriendlyMessage = "连接被拒绝，请在 MetaMask 中批准连接";
+        }
+      }
+
+      // Show error modal instead of alert
+      setErrorMessage(userFriendlyMessage);
+      setShowErrorModal(true);
     }
   };
 
@@ -476,6 +504,49 @@ export default function PaymentPage() {
             </p>
           </div>
         </footer>
+
+        {/* Wallet Modal */}
+        <WalletModal
+          isOpen={showWalletModal}
+          onClose={() => setShowWalletModal(false)}
+          selectedChain={selectedChain!}
+          onConnect={handleWalletConnect}
+        />
+
+        {/* Error Modal */}
+        {showErrorModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="bg-gray-800 rounded-2xl border-2 border-red-600 shadow-2xl p-6 mx-4 max-w-md w-full">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg
+                    className="w-8 h-8 text-white"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">连接失败</h3>
+                <p className="text-gray-300 mb-6 leading-relaxed">
+                  {errorMessage}
+                </p>
+                <button
+                  onClick={() => setShowErrorModal(false)}
+                  className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold transition-colors"
+                >
+                  确定
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

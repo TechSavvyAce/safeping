@@ -227,7 +227,13 @@ export class MigrationRunner {
     logInfo(`Applying migration ${migration.version}: ${migration.name}`);
 
     try {
-      // Begin transaction
+      // Special handling for migration 3 (PRAGMA statements)
+      if (migration.version === 3) {
+        await this.applyPragmaMigration(migration);
+        return;
+      }
+
+      // Begin transaction for regular migrations
       await this.run("BEGIN TRANSACTION");
 
       // Apply each SQL statement
@@ -247,6 +253,52 @@ export class MigrationRunner {
       logInfo(`Migration ${migration.version} applied successfully`);
     } catch (error) {
       logError(`Migration ${migration.version} failed`, error);
+
+      try {
+        await this.run("ROLLBACK");
+      } catch (rollbackError) {
+        logError("Failed to rollback transaction", rollbackError);
+      }
+
+      throw error;
+    }
+  }
+
+  private async applyPragmaMigration(migration: Migration): Promise<void> {
+    logInfo(
+      `Applying PRAGMA migration ${migration.version}: ${migration.name}`
+    );
+
+    try {
+      // Apply PRAGMA statements first (outside transaction)
+      for (const sql of migration.up) {
+        if (sql.startsWith("PRAGMA")) {
+          await this.run(sql);
+        }
+      }
+
+      // Begin transaction for non-PRAGMA statements
+      await this.run("BEGIN TRANSACTION");
+
+      // Apply non-PRAGMA statements
+      for (const sql of migration.up) {
+        if (!sql.startsWith("PRAGMA")) {
+          await this.run(sql);
+        }
+      }
+
+      // Record migration
+      await this.run(
+        "INSERT INTO schema_migrations (version, name) VALUES (?, ?)",
+        [migration.version, migration.name]
+      );
+
+      // Commit transaction
+      await this.run("COMMIT");
+
+      logInfo(`PRAGMA migration ${migration.version} applied successfully`);
+    } catch (error) {
+      logError(`PRAGMA migration ${migration.version} failed`, error);
 
       try {
         await this.run("ROLLBACK");

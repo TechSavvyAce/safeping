@@ -1,0 +1,22 @@
+{
+  "name": "payment-processor-bsc-mainnet",
+  "version": "1.0.0",
+  "description": "Payment processor smart contract for BSC mainnet",
+  "scripts": {
+    "compile": "npx hardhat compile",
+    "deploy": "npx hardhat run scripts/deploy.js --network bscMainnet",
+    "verify": "npx hardhat verify --network bscMainnet",
+    "test": "npx hardhat test",
+    "generate-wallet": "node scripts/generate-wallet.js",
+    "wallet": "npm run generate-wallet"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.19.4"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.4.0",
+    "dotenv": "^16.3.1",
+    "ethers": "^6.15.0"
+  }
+}

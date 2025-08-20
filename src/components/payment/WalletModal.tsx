@@ -129,10 +129,10 @@ export function WalletModal({
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-md mx-4 bg-gray-800 rounded-2xl border-2 border-gray-700 shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-md mx-4 bg-gray-800 rounded-2xl border-2 border-gray-700 shadow-2xl overflow-hidden z-50">
         {/* Header */}
         <div className="relative bg-gradient-to-r from-red-600 to-red-700 p-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between relative z-10">
             <div>
               <h3 className="text-xl font-bold text-white">
                 连接钱包
@@ -149,7 +149,9 @@ export function WalletModal({
             </div>
             <button
               onClick={onClose}
-              className="text-white/80 hover:text-white transition-colors"
+              className="text-white/80 hover:text-white transition-colors relative z-20 p-2 hover:bg-white/10 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-white/50"
+              aria-label="关闭钱包选择"
+              title="关闭"
             >
               <svg
                 className="w-6 h-6"
@@ -167,8 +169,8 @@ export function WalletModal({
             </button>
           </div>
 
-          {/* Floating particles */}
-          <div className="absolute inset-0 opacity-20">
+          {/* Floating particles - moved behind content */}
+          <div className="absolute inset-0 opacity-20 pointer-events-none">
             <div className="absolute top-4 left-4 w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
             <div className="absolute top-8 right-8 w-1 h-1 bg-yellow-300 rounded-full animate-ping"></div>
             <div className="absolute bottom-6 left-8 w-1.5 h-1.5 bg-yellow-400 rounded-full animate-bounce"></div>

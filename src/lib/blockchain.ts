@@ -478,7 +478,6 @@ export class BlockchainService {
     networks: Array<{ chain: ChainType; name: string; explorer: string }>;
   } {
     const isMainnet = process.env.NEXT_PUBLIC_NETWORK_MODE === "mainnet";
-
     return {
       isMainnet,
       networks: [

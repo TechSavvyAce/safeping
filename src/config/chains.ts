@@ -29,11 +29,10 @@ export const CHAIN_CONFIG: ChainConfig = {
   ethereum: {
     usdt: isMainnet
       ? "0xdAC17F958D2ee523a2206206994597C13D831ec7" // Ethereum Mainnet USDT
-      : "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", // Ethereum Sepolia USDT (example)
-    paymentProcessor: getContractAddress(
-      process.env.ETHEREUM_PAYMENT_PROCESSOR_TESTNET || "",
-      process.env.ETHEREUM_PAYMENT_PROCESSOR_MAINNET || ""
-    ),
+      : "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", // Ethereum Sepolia USDT
+    paymentProcessor: isMainnet
+      ? process.env.ETHEREUM_PAYMENT_PROCESSOR_MAINNET || ""
+      : process.env.ETHEREUM_PAYMENT_PROCESSOR_TESTNET || "",
     chainId: isMainnet ? "0x1" : "0xaa36a7", // 1 mainnet, 11155111 sepolia
     decimals: 6,
     rpc: isMainnet

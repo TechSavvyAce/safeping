@@ -4,7 +4,6 @@ A **production-ready, professional-grade cryptocurrency payment platform** built
 
 [![Next.js](https://img.shields.io/badge/Next.js-15.4.6-black)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue)](https://www.docker.com/)
 [![Production Ready](https://img.shields.io/badge/Production-Ready-green)](#)
 
 ## ✨ Features
@@ -45,8 +44,7 @@ A **production-ready, professional-grade cryptocurrency payment platform** built
 ### Prerequisites
 
 - **Node.js** 18.x or later
-- **Docker** 20.x or later (for production)
-- **Docker Compose** 2.x or later
+- **npm** 9.x or later
 
 ### Development Setup
 
@@ -95,10 +93,10 @@ For production deployment, see our comprehensive guides:
 - [📋 Production Checklist](PRODUCTION_CHECKLIST.md)
 - [🔧 Mainnet Deployment](DEPLOYMENT_CHECKLIST.md)
 
-**Quick Docker deployment:**
+**Quick Node.js deployment:**
 
 ```bash
-# Deploy with Docker
+# Deploy with Node.js
 ./scripts/deploy.sh
 
 # Check health
@@ -260,27 +258,33 @@ Supported languages:
 
 Add new languages by extending `src/lib/i18n.ts`.
 
-## 🐳 Docker Support
+## 🚀 Node.js Deployment
 
 ### Development
 
 ```bash
-docker build -t crypto-payment-platform .
-docker run -p 3000:3000 crypto-payment-platform
+npm run dev
 ```
 
 ### Production
 
 ```bash
-docker-compose up -d
+npm run build
+npm start
+```
+
+Or use the deployment script:
+
+```bash
+./scripts/deploy.sh
 ```
 
 Includes:
 
-- Multi-stage optimized builds
+- Production build optimization
 - Health checks
-- Volume persistence
-- Security hardening
+- Process management
+- Logging and monitoring
 
 ## 📝 Scripts
 

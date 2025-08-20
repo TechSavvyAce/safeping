@@ -3,22 +3,18 @@
 // =================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { getAllowedOrigins, isDevelopment } from "./env-validation";
+import { isDevelopment } from "@/lib/env-validation";
 
 export function corsHeaders(origin?: string): Record<string, string> {
-  const allowedOrigins = getAllowedOrigins();
   const isDev = isDevelopment();
 
   // In development, allow all origins
   let allowOrigin = "*";
 
-  // In production, check against allowed origins
+  // In production, allow all origins for now (can be configured later)
+  // TODO: Add CORS configuration when needed
   if (!isDev && origin) {
-    if (allowedOrigins.includes(origin)) {
-      allowOrigin = origin;
-    } else {
-      allowOrigin = "null"; // Explicitly deny
-    }
+    allowOrigin = origin; // Allow the requesting origin
   }
 
   return {

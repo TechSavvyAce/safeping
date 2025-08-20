@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =================================
-# 🚀 Production Deployment Script
+# 🚀 Production Deployment Script (Node.js)
 # =================================
 
 set -e  # Exit on any error
@@ -15,8 +15,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 APP_NAME="crypto-payment-platform"
-DOCKER_IMAGE="$APP_NAME:latest"
-CONTAINER_NAME="$APP_NAME-app"
+PORT=3000
 
 # Functions
 log_info() {
@@ -39,44 +38,52 @@ log_error() {
 check_prerequisites() {
     log_info "Checking prerequisites..."
     
-    if ! command -v docker &> /dev/null; then
-        log_error "Docker is not installed"
+    if ! command -v node &> /dev/null; then
+        log_error "Node.js is not installed"
         exit 1
     fi
     
-    if ! command -v docker-compose &> /dev/null; then
-        log_error "Docker Compose is not installed"
+    if ! command -v npm &> /dev/null; then
+        log_error "npm is not installed"
         exit 1
     fi
     
     log_success "Prerequisites check passed"
 }
 
+# Install dependencies
+install_dependencies() {
+    log_info "Installing dependencies..."
+    
+    npm ci --only=production
+    
+    log_success "Dependencies installed successfully"
+}
+
 # Build the application
 build_app() {
     log_info "Building application..."
     
-    # Build Docker image
-    docker build -t $DOCKER_IMAGE .
+    npm run build
     
     log_success "Application built successfully"
 }
 
-# Deploy the application
-deploy_app() {
-    log_info "Deploying application..."
+# Start the application
+start_app() {
+    log_info "Starting application..."
     
-    # Stop existing containers
-    if docker ps -q --filter "name=$CONTAINER_NAME" | grep -q .; then
-        log_warning "Stopping existing container..."
-        docker stop $CONTAINER_NAME
-        docker rm $CONTAINER_NAME
+    # Check if app is already running
+    if pgrep -f "next start" > /dev/null; then
+        log_warning "Application is already running, stopping it first..."
+        pkill -f "next start"
+        sleep 2
     fi
     
-    # Start new containers
-    docker-compose up -d
+    # Start the application in background
+    nohup npm start > ./logs/app.log 2>&1 &
     
-    log_success "Application deployed successfully"
+    log_success "Application started successfully"
 }
 
 # Health check
@@ -86,10 +93,10 @@ health_check() {
     # Wait for app to start
     sleep 10
     
-    # Check if container is running
-    if ! docker ps --filter "name=$CONTAINER_NAME" --filter "status=running" | grep -q $CONTAINER_NAME; then
-        log_error "Container is not running"
-        docker logs $CONTAINER_NAME
+    # Check if process is running
+    if ! pgrep -f "next start" > /dev/null; then
+        log_error "Application is not running"
+        cat ./logs/app.log
         exit 1
     fi
     
@@ -98,7 +105,7 @@ health_check() {
     local attempt=1
     
     while [ $attempt -le $max_attempts ]; do
-        if curl -f http://localhost:3000/api/health > /dev/null 2>&1; then
+        if curl -f http://localhost:$PORT/api/health > /dev/null 2>&1; then
             log_success "Health check passed"
             return 0
         fi
@@ -109,7 +116,7 @@ health_check() {
     done
     
     log_error "Health check failed after $max_attempts attempts"
-    docker logs $CONTAINER_NAME
+    cat ./logs/app.log
     exit 1
 }
 
@@ -134,15 +141,37 @@ backup_database() {
 show_deployment_info() {
     log_success "Deployment completed successfully!"
     echo ""
-    echo "📱 Application URL: http://localhost:3000"
-    echo "🏥 Health Check: http://localhost:3000/api/health"
-    echo "📊 API Docs: http://localhost:3000/api"
+    echo "📱 Application URL: http://localhost:$PORT"
+    echo "🏥 Health Check: http://localhost:$PORT/api/health"
+    echo "📊 API Docs: http://localhost:$PORT/api"
     echo ""
-    echo "🐳 Docker Commands:"
-    echo "   View logs: docker logs $CONTAINER_NAME"
-    echo "   Stop app: docker-compose down"
-    echo "   Restart: docker-compose restart"
+    echo "📋 Node.js Commands:"
+    echo "   View logs: tail -f ./logs/app.log"
+    echo "   Stop app: pkill -f 'next start'"
+    echo "   Restart: $0 restart"
     echo ""
+}
+
+# Stop the application
+stop_app() {
+    log_info "Stopping application..."
+    
+    if pgrep -f "next start" > /dev/null; then
+        pkill -f "next start"
+        log_success "Application stopped"
+    else
+        log_warning "Application is not running"
+    fi
+}
+
+# Restart the application
+restart_app() {
+    log_info "Restarting application..."
+    stop_app
+    sleep 2
+    start_app
+    health_check
+    log_success "Application restarted successfully"
 }
 
 # Main deployment process
@@ -152,18 +181,23 @@ main() {
     
     check_prerequisites
     backup_database
+    install_dependencies
     build_app
-    deploy_app
+    start_app
     health_check
     show_deployment_info
     
     log_success "Deployment process completed!"
 }
 
+# Create logs directory
+mkdir -p ./logs
+
 # Handle script arguments
 case "${1:-deploy}" in
     "build")
         check_prerequisites
+        install_dependencies
         build_app
         ;;
     "deploy")
@@ -176,22 +210,31 @@ case "${1:-deploy}" in
         backup_database
         ;;
     "logs")
-        docker logs -f $CONTAINER_NAME
+        tail -f ./logs/app.log
         ;;
     "stop")
-        docker-compose down
-        log_success "Application stopped"
+        stop_app
+        ;;
+    "restart")
+        restart_app
+        ;;
+    "start")
+        check_prerequisites
+        start_app
+        health_check
         ;;
     *)
-        echo "Usage: $0 {build|deploy|health|backup|logs|stop}"
+        echo "Usage: $0 {build|deploy|health|backup|logs|stop|restart|start}"
         echo ""
         echo "Commands:"
-        echo "  build   - Build Docker image only"
+        echo "  build   - Build application only"
         echo "  deploy  - Full deployment (default)"
         echo "  health  - Run health check"
         echo "  backup  - Backup database"
         echo "  logs    - Show application logs"
         echo "  stop    - Stop application"
+        echo "  restart - Restart application"
+        echo "  start   - Start application only"
         exit 1
         ;;
 esac

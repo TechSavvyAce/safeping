@@ -9,7 +9,6 @@ import { blockchainService } from "@/lib/blockchain";
 export async function GET() {
   try {
     const networkInfo = blockchainService.getNetworkInfo();
-
     // Return safe configuration for frontend
     const safeConfig = {
       contracts: {

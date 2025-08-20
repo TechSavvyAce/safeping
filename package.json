@@ -18,9 +18,7 @@
     "db:reset": "node scripts/db.js reset",
     "deploy": "./scripts/deploy.sh",
     "deploy:build": "./scripts/deploy.sh build",
-    "deploy:health": "./scripts/deploy.sh health",
-    "verify": "node scripts/verify-production.js",
-    "verify:prod": "node scripts/verify-production.js https://safeping.xyz"
+    "deploy:health": "./scripts/deploy.sh health"
   },
   "dependencies": {
     "@next/font": "^14.2.15",

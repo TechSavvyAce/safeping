@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 
-// Environment validation schema
+// Environment validation schema - Only includes variables actually used
 const envSchema = z.object({
   // App configuration
   NODE_ENV: z
@@ -20,10 +20,6 @@ const envSchema = z.object({
   // Database
   DATABASE_URL: z.string().default("./data/payments.db"),
 
-  // Security (optional in development, required in production)
-  WEBHOOK_SECRET: z.string().optional(),
-  JWT_SECRET: z.string().optional(),
-
   // Payment limits
   PAYMENT_EXPIRY_MINUTES: z.string().transform((val) => parseInt(val) || 30),
   MAX_PAYMENT_AMOUNT: z.string().transform((val) => parseInt(val) || 10000),
@@ -33,10 +29,12 @@ const envSchema = z.object({
   RATE_LIMIT_WINDOW_MS: z.string().transform((val) => parseInt(val) || 900000),
   RATE_LIMIT_MAX_REQUESTS: z.string().transform((val) => parseInt(val) || 100),
 
-  // CORS
-  ALLOWED_ORIGINS: z.string().optional(),
+  // Blockchain contracts (testnet)
+  BSC_PAYMENT_PROCESSOR_TESTNET: z.string().optional(),
+  ETHEREUM_PAYMENT_PROCESSOR_TESTNET: z.string().optional(),
+  TRON_PAYMENT_PROCESSOR_TESTNET: z.string().optional(),
 
-  // Blockchain contracts (mainnet)
+  // Blockchain contracts (mainnet) - only required if using mainnet
   BSC_PAYMENT_PROCESSOR_MAINNET: z.string().optional(),
   ETHEREUM_PAYMENT_PROCESSOR_MAINNET: z.string().optional(),
   TRON_PAYMENT_PROCESSOR_MAINNET: z.string().optional(),
@@ -49,12 +47,14 @@ const envSchema = z.object({
   ETHEREUM_RPC_URL: z.string().url().optional(),
   TRON_RPC_URL: z.string().url().optional(),
 
-  // API Keys
+  // API Keys (for contract deployment scripts)
   BSC_API_KEY: z.string().optional(),
   ETHEREUM_API_KEY: z.string().optional(),
 
-  // Optional services
-  REDIS_URL: z.string().optional(),
+  // Contract deployment (for scripts only)
+  PRIVATE_KEY: z.string().optional(),
+
+  // Logging (optional)
   LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).default("info"),
   ENABLE_REQUEST_LOGGING: z
     .string()
@@ -98,15 +98,6 @@ export function validateEnvironment(): Environment {
 
 function validateProductionRequirements(env: Environment) {
   const errors: string[] = [];
-
-  // Security requirements
-  if (!env.WEBHOOK_SECRET) {
-    errors.push("WEBHOOK_SECRET is required in production");
-  }
-
-  if (!env.JWT_SECRET) {
-    errors.push("JWT_SECRET is required in production");
-  }
 
   // Base URL requirement
   if (!env.NEXT_PUBLIC_BASE_URL) {
@@ -171,16 +162,41 @@ export function getDatabaseUrl(): string {
   return getEnvironment().DATABASE_URL;
 }
 
-export function getWebhookSecret(): string | undefined {
-  return getEnvironment().WEBHOOK_SECRET;
+export function getPaymentConfig() {
+  const env = getEnvironment();
+  return {
+    expiryMinutes: env.PAYMENT_EXPIRY_MINUTES,
+    maxAmount: env.MAX_PAYMENT_AMOUNT,
+    minAmount: env.MIN_PAYMENT_AMOUNT,
+  };
 }
 
-export function getJwtSecret(): string | undefined {
-  return getEnvironment().JWT_SECRET;
+export function getRateLimitConfig() {
+  const env = getEnvironment();
+  return {
+    windowMs: env.RATE_LIMIT_WINDOW_MS,
+    maxRequests: env.RATE_LIMIT_MAX_REQUESTS,
+  };
 }
 
-export function getAllowedOrigins(): string[] {
-  const origins = getEnvironment().ALLOWED_ORIGINS;
-  if (!origins) return [];
-  return origins.split(",").map((origin) => origin.trim());
+export function getBlockchainConfig() {
+  const env = getEnvironment();
+  return {
+    networkMode: env.NEXT_PUBLIC_NETWORK_MODE,
+    bsc: {
+      rpcUrl: env.BSC_RPC_URL,
+      testnetProcessor: env.BSC_PAYMENT_PROCESSOR_TESTNET,
+      mainnetProcessor: env.BSC_PAYMENT_PROCESSOR_MAINNET,
+    },
+    ethereum: {
+      rpcUrl: env.ETHEREUM_RPC_URL,
+      testnetProcessor: env.ETHEREUM_PAYMENT_PROCESSOR_TESTNET,
+      mainnetProcessor: env.ETHEREUM_PAYMENT_PROCESSOR_MAINNET,
+    },
+    tron: {
+      rpcUrl: env.TRON_RPC_URL,
+      testnetProcessor: env.TRON_PAYMENT_PROCESSOR_TESTNET,
+      mainnetProcessor: env.TRON_PAYMENT_PROCESSOR_MAINNET,
+    },
+  };
 }

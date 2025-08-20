@@ -72,9 +72,20 @@ export class WalletManager {
       }
     }
 
-    // Check TronLink
-    if (typeof window !== "undefined" && (window.tronWeb || window.tronLink)) {
-      wallets.tronlink = true;
+    // Check TronLink - more robust detection
+    if (typeof window !== "undefined") {
+      // Check for TronLink extension
+      if (window.tronLink) {
+        wallets.tronlink = true;
+      }
+      // Check for TronWeb (which TronLink provides)
+      else if (window.tronWeb && window.tronWeb.ready) {
+        wallets.tronlink = true;
+      }
+      // Check for legacy TronWeb
+      else if (window.tronWeb && window.tronWeb.defaultAddress) {
+        wallets.tronlink = true;
+      }
     }
 
     return wallets;
@@ -158,43 +169,121 @@ export class WalletManager {
 
     try {
       // Check for TronLink
-      if (window.tronLink) {
-        const result = await window.tronLink.request({
-          method: "tron_requestAccounts",
-        });
-
-        if (result.code === 200) {
-          const address = window.tronWeb.defaultAddress.base58;
-
-          if (!isValidAddress(address, "tron")) {
-            throw new Error("Invalid TRON address");
-          }
-
-          return {
-            address,
-            wallet: "tronlink",
-            chain: "tron",
-          };
-        } else {
-          throw new Error("TronLink connection rejected");
-        }
-      } else if (window.tronWeb && window.tronWeb.defaultAddress.base58) {
-        const address = window.tronWeb.defaultAddress.base58;
-
-        if (!isValidAddress(address, "tron")) {
-          throw new Error("Invalid TRON address");
-        }
-
-        return {
-          address,
-          wallet: "tronlink",
-          chain: "tron",
-        };
-      } else {
-        throw new Error("TronLink not properly initialized");
+      if (!window.tronLink && !window.tronWeb) {
+        throw new Error(
+          "TronLink not installed. Please install TronLink extension."
+        );
       }
+
+      // Ensure TronWeb is available
+      if (!window.tronWeb) {
+        throw new Error(
+          "TronWeb not initialized. Please refresh the page and try again."
+        );
+      }
+
+      // Check if TronLink is unlocked
+      if (!window.tronWeb.ready) {
+        throw new Error("TronLink is locked. Please unlock your wallet.");
+      }
+
+      // Check network (testnet vs mainnet)
+      const isTestnet = process.env.NEXT_PUBLIC_NETWORK_MODE !== "mainnet";
+      const expectedNetwork = isTestnet ? "Shasta" : "Mainnet";
+      const currentNetwork = window.tronWeb.fullNode.host;
+
+      if (isTestnet && !currentNetwork.includes("shasta")) {
+        throw new Error(
+          `Please switch to TRON ${expectedNetwork} testnet in TronLink`
+        );
+      } else if (!isTestnet && currentNetwork.includes("shasta")) {
+        throw new Error(
+          `Please switch to TRON ${expectedNetwork} mainnet in TronLink`
+        );
+      }
+
+      // Request account access using modern API
+      let address: string;
+
+      if (window.tronLink && window.tronLink.request) {
+        try {
+          // Try modern TronLink API first
+          const result = await window.tronLink.request({
+            method: "tron_requestAccounts",
+          });
+
+          if (result.code === 200 && result.data && result.data.length > 0) {
+            address = result.data[0];
+          } else {
+            throw new Error("No accounts returned from TronLink");
+          }
+        } catch (apiError: any) {
+          console.warn(
+            "Modern TronLink API failed, falling back to legacy method:",
+            apiError
+          );
+
+          // Fallback to legacy method
+          if (
+            window.tronWeb.defaultAddress &&
+            window.tronWeb.defaultAddress.base58
+          ) {
+            address = window.tronWeb.defaultAddress.base58;
+          } else {
+            throw new Error("No accounts available in TronLink");
+          }
+        }
+      } else {
+        // Legacy method
+        if (
+          window.tronWeb.defaultAddress &&
+          window.tronWeb.defaultAddress.base58
+        ) {
+          address = window.tronWeb.defaultAddress.base58;
+        } else {
+          throw new Error("No accounts available in TronLink");
+        }
+      }
+
+      // Validate address
+      if (!address || !isValidAddress(address, "tron")) {
+        throw new Error("Invalid TRON address received from TronLink");
+      }
+
+      // Verify account is accessible
+      try {
+        const account = await window.tronWeb.trx.getAccount(address);
+        if (!account) {
+          throw new Error("Account not accessible");
+        }
+      } catch (verifyError: any) {
+        throw new Error(`Account verification failed: ${verifyError.message}`);
+      }
+
+      return {
+        address,
+        wallet: "tronlink",
+        chain: "tron",
+      };
     } catch (error: any) {
-      throw new Error(`TronLink connection failed: ${error.message}`);
+      // Provide more specific error messages
+      if (error.message.includes("User rejected")) {
+        throw new Error(
+          "Connection rejected by user. Please approve the connection in TronLink."
+        );
+      } else if (error.message.includes("not installed")) {
+        throw new Error(
+          "TronLink not installed. Please install the TronLink browser extension."
+        );
+      } else if (error.message.includes("locked")) {
+        throw new Error(
+          "TronLink is locked. Please unlock your wallet and try again."
+        );
+      } else if (error.message.includes("network")) {
+        throw new Error(error.message);
+      } else {
+        throw new Error(`TronLink connection failed: ${error.message}`);
+      }
     }
   }
 
@@ -247,7 +336,10 @@ export class WalletManager {
    * Switch network for EVM wallets
    */
   private async switchNetwork(chain: ChainType): Promise<void> {
-    if (chain === "tron") return; // TRON uses TronLink
+    if (chain === "tron") {
+      await this.switchTronNetwork();
+      return;
+    }
 
     const config = CHAIN_CONFIG[chain];
 
@@ -263,6 +355,41 @@ export class WalletManager {
       } else {
         throw switchError;
       }
+    }
+  }
+
+  /**
+   * Switch TRON network in TronLink
+   */
+  private async switchTronNetwork(): Promise<void> {
+    try {
+      if (!window.tronWeb) {
+        throw new Error("TronWeb not available");
+      }
+
+      const isTestnet = process.env.NEXT_PUBLIC_NETWORK_MODE !== "mainnet";
+      const currentNetwork = window.tronWeb.fullNode.host;
+      const expectedNetwork = isTestnet ? "shasta" : "mainnet";
+
+      // Check if already on correct network
+      if (isTestnet && currentNetwork.includes("shasta")) {
+        return; // Already on testnet
+      }
+      if (!isTestnet && !currentNetwork.includes("shasta")) {
+        return; // Already on mainnet
+      }
+
+      // Show user instructions for network switching
+      const networkName = isTestnet ? "Shasta Testnet" : "Mainnet";
+      throw new Error(
+        `Please switch to TRON ${networkName} in your TronLink wallet:\n` +
+          `1. Open TronLink extension\n` +
+          `2. Click on network selector\n` +
+          `3. Choose "${networkName}"\n` +
+          `4. Refresh this page and try again`
+      );
+    } catch (error: any) {
+      throw new Error(`Failed to switch TRON network: ${error.message}`);
     }
   }
 

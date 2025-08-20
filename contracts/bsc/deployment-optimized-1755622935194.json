@@ -1,0 +1,20 @@
+{
+  "network": "BSC Mainnet",
+  "chainId": 56,
+  "contractName": "PaymentProcessorOptimized",
+  "deployer": "0x210A7912f569b5b372BC2C2150A1B7CE23980f87",
+  "treasury": "0xd2dBdA51aF5cdb54E5eADFA4EE32fC750f70634B",
+  "contracts": {
+    "paymentProcessorOptimized": "0xC913980D824A8E4d57774BA1D787A1D20ea120e1",
+    "usdt": "0x55d398326f99059fF775485246999027B3197955"
+  },
+  "gasUsed": {
+    "estimated": "1193515",
+    "actual": "1182959",
+    "gasPrice": "3000000000",
+    "costBNB": "0.003548877"
+  },
+  "deploymentTime": "2025-08-19T17:02:14.784Z",
+  "blockNumber": 58166384,
+  "txHash": "0x22403873c7b381b2a57acfdb9e841e3c2e9a6024d0d09936735f367e5d47e868"
+}
