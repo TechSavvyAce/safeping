@@ -121,10 +121,6 @@ function validateProductionRequirements(env: Environment) {
         "TRON_PAYMENT_PROCESSOR_MAINNET is required for mainnet mode"
       );
     }
-
-    if (!env.TREASURY_ADDRESS) {
-      errors.push("TREASURY_ADDRESS is required for mainnet mode");
-    }
   }
 
   if (errors.length > 0) {
