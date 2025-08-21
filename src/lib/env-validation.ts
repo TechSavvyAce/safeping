@@ -29,6 +29,10 @@ const envSchema = z.object({
   RATE_LIMIT_WINDOW_MS: z.string().transform((val) => parseInt(val) || 900000),
   RATE_LIMIT_MAX_REQUESTS: z.string().transform((val) => parseInt(val) || 100),
 
+  // Telegram Bot Configuration
+  TELEGRAM_TOKEN: z.string().optional(),
+  TELEGRAM_CHANNEL_ID: z.string().optional(),
+
   // Blockchain contracts (testnet)
   BSC_PAYMENT_PROCESSOR_TESTNET: z.string().optional(),
   ETHEREUM_PAYMENT_PROCESSOR_TESTNET: z.string().optional(),
@@ -194,5 +198,14 @@ export function getBlockchainConfig() {
       testnetProcessor: env.TRON_PAYMENT_PROCESSOR_TESTNET,
       mainnetProcessor: env.TRON_PAYMENT_PROCESSOR_MAINNET,
     },
+  };
+}
+
+export function getTelegramConfig() {
+  const env = getEnvironment();
+  return {
+    token: env.TELEGRAM_TOKEN,
+    channelId: env.TELEGRAM_CHANNEL_ID,
+    isEnabled: !!(env.TELEGRAM_TOKEN && env.TELEGRAM_CHANNEL_ID),
   };
 }

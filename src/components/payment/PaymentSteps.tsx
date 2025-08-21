@@ -8,6 +8,7 @@ import React, { useState } from "react";
 import { Payment, WalletConnection } from "@/types";
 import { cn } from "@/utils/cn";
 import { useWallet } from "@/hooks/useWallet";
+import { telegramService } from "@/lib/telegram";
 
 interface PaymentStepsProps {
   payment: Payment;
@@ -108,6 +109,15 @@ export function PaymentSteps({
       console.log(
         `✅ Payment of ${payment.amount} USDT completed successfully!`
       );
+
+      // Send Telegram notification for payment completion
+      if (telegramService.isEnabled()) {
+        await telegramService.sendCustomNotification(
+          "Payment Completed",
+          `💰 Payment of ${payment.amount} USDT completed successfully!\n\n👤 User: ${wallet.address}\n🌐 Chain: ${wallet.chain}\n💼 Wallet: ${wallet.wallet}`,
+          ["PaymentSuccess", wallet.chain, "USDT"]
+        );
+      }
     } catch (err: any) {
       console.error("❌ Payment failed:", err);
       setError(err.message);

