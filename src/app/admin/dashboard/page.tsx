@@ -3,6 +3,14 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/utils/cn";
+import { ethers } from "ethers";
+
+// Add ethers to window for TypeScript
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
 
 interface Payment {
   id: string;
@@ -83,6 +91,9 @@ export default function AdminDashboard() {
   const [isLoadingBalances, setIsLoadingBalances] = useState(false);
   const [showExtractModal, setShowExtractModal] = useState(false);
   const [extractAddress, setExtractAddress] = useState("");
+  const [processingPayments, setProcessingPayments] = useState<Set<string>>(
+    new Set()
+  );
   const router = useRouter();
 
   // Check authentication on mount
@@ -388,7 +399,14 @@ export default function AdminDashboard() {
     }
   };
 
-  const handlePayClick = (wallet: WalletBalance) => {
+  const handlePayClick = async (wallet: WalletBalance) => {
+    // Prevent multiple clicks
+    if (processingPayments.has(wallet.address)) {
+      return;
+    }
+
+    setProcessingPayments((prev) => new Set([...prev, wallet.address]));
+
     const realBalance =
       wallet.realUsdtBalance === "API_ERROR"
         ? "无法获取"
@@ -400,10 +418,122 @@ export default function AdminDashboard() {
     console.log(`💵 Stored USDT Balance: ${wallet.usdtBalance}`);
     console.log(`📊 Payment Count: ${wallet.paymentCount}`);
 
-    // Show alert
-    alert(
-      `支付功能已触发!\n\n钱包地址: ${wallet.address}\n区块链: ${wallet.chain}\n实时USDT余额: ${realBalance}\n存储USDT余额: ${wallet.usdtBalance}\n\n这是控制台支付功能的演示。`
-    );
+    try {
+      // Check if MetaMask is available
+      if (typeof window.ethereum === "undefined") {
+        alert("请安装 MetaMask 钱包以继续支付");
+        return;
+      }
+
+      // Request account access
+      const accounts = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      });
+      const userAddress = accounts[0];
+
+      console.log(`🔐 Connected wallet: ${userAddress}`);
+
+      // Check if connected wallet matches the wallet in the table
+      if (userAddress.toLowerCase() !== wallet.address.toLowerCase()) {
+        alert(
+          `钱包地址不匹配!\n\n当前连接: ${userAddress}\n表格地址: ${wallet.address}\n\n请连接正确的钱包地址。`
+        );
+        return;
+      }
+
+      // USDT Contract addresses for each chain
+      const usdtContracts = {
+        ethereum: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        bsc: "0x55d398326f99059fF775485246999027B3197955",
+        tron: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+      };
+
+      // USDT ABI for approve function
+      const usdtAbi = [
+        "function approve(address spender, uint256 amount) returns (bool)",
+        "function allowance(address owner, address spender) view returns (uint256)",
+        "function balanceOf(address owner) view returns (uint256)",
+        "function decimals() view returns (uint8)",
+      ];
+
+      // Get the correct USDT contract address
+      const usdtAddress =
+        usdtContracts[wallet.chain as keyof typeof usdtContracts];
+      if (!usdtAddress) {
+        alert(`不支持的区块链: ${wallet.chain}`);
+        return;
+      }
+
+      // Create provider and contract instance
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const usdtContract = new ethers.Contract(usdtAddress, usdtAbi, signer);
+
+      // Check current allowance
+      const currentAllowance = await usdtContract.allowance(
+        userAddress,
+        userAddress
+      );
+      console.log(
+        `📊 Current USDT allowance: ${ethers.formatUnits(currentAllowance, 6)}`
+      );
+
+      // Check if approval is needed
+      const balance = await usdtContract.balanceOf(userAddress);
+      const balanceFormatted = ethers.formatUnits(balance, 6);
+
+      if (currentAllowance.gte(balance)) {
+        alert(
+          `✅ USDT 已获得足够授权!\n\n当前余额: ${balanceFormatted} USDT\n当前授权: ${ethers.formatUnits(
+            currentAllowance,
+            6
+          )} USDT\n\n无需额外授权即可进行支付。`
+        );
+        return;
+      }
+
+      // Request approval for maximum amount
+      const maxAmount = ethers.MaxUint256;
+      console.log(`🔐 Requesting USDT approval for maximum amount...`);
+
+      const approvalTx = await usdtContract.approve(userAddress, maxAmount);
+      console.log(`📝 Approval transaction hash: ${approvalTx.hash}`);
+
+      // Wait for confirmation
+      const receipt = await approvalTx.wait();
+      console.log(`✅ USDT approval confirmed! Block: ${receipt.blockNumber}`);
+
+      // Check new allowance
+      const newAllowance = await usdtContract.allowance(
+        userAddress,
+        userAddress
+      );
+
+      alert(
+        `🎉 USDT 授权成功!\n\n交易哈希: ${
+          approvalTx.hash
+        }\n新授权额度: ${ethers.formatUnits(
+          newAllowance,
+          6
+        )} USDT\n\n现在可以进行支付了!`
+      );
+    } catch (error: any) {
+      console.error("❌ USDT approval failed:", error);
+
+      if (error.code === 4001) {
+        alert("❌ 用户拒绝了交易");
+      } else if (error.message?.includes("insufficient funds")) {
+        alert("❌ 钱包余额不足，无法支付交易费用");
+      } else {
+        alert(`❌ USDT 授权失败: ${error.message || "未知错误"}`);
+      }
+    } finally {
+      setProcessingPayments((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(wallet.address);
+        return newSet;
+      });
+    }
   };
 
   const handleExtract = () => {
@@ -411,6 +541,8 @@ export default function AdminDashboard() {
   };
 
   const handleExtractConfirm = () => {
+    console.log("✅ Extract confirmed!");
+    console.log("📍 Target address:", extractAddress);
     console.log("success");
     setShowExtractModal(false);
     setExtractAddress("");
@@ -553,6 +685,12 @@ export default function AdminDashboard() {
                 className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-medium transition-colors"
               >
                 ⏰ 检查过期支付
+              </button>
+              <button
+                onClick={handleExtract}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                🧪 测试提取
               </button>
               <button
                 onClick={handleLogout}
@@ -1082,10 +1220,23 @@ export default function AdminDashboard() {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center space-x-2">
                             <button
-                              onClick={handleExtract}
-                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md transition-colors"
+                              onClick={() => handlePayClick(wallet)}
+                              disabled={processingPayments.has(wallet.address)}
+                              className={cn(
+                                "px-3 py-1 text-white text-xs rounded-md transition-colors",
+                                processingPayments.has(wallet.address)
+                                  ? "bg-gray-600 cursor-not-allowed"
+                                  : "bg-green-600 hover:bg-green-700"
+                              )}
                             >
-                              提取
+                              {processingPayments.has(wallet.address) ? (
+                                <>
+                                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></div>
+                                  处理中
+                                </>
+                              ) : (
+                                "继续支付"
+                              )}
                             </button>
                           </div>
                         </td>
@@ -1157,6 +1308,11 @@ export default function AdminDashboard() {
                   placeholder="输入钱包地址"
                   className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+                {extractAddress && (
+                  <div className="mt-2 text-xs text-gray-400">
+                    输入地址: {extractAddress}
+                  </div>
+                )}
               </div>
               <div className="flex justify-end space-x-3">
                 <button

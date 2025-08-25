@@ -65,6 +65,20 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Check if ethers is available
+    if (typeof ethers === "undefined") {
+      logger.warn("Ethers.js not available, falling back to stored balances");
+      return NextResponse.json({
+        balances: balances.map((wallet) => ({
+          ...wallet,
+          realUsdtBalance: wallet.usdtBalance || "0.00",
+          lastUpdated: new Date().toISOString(),
+        })),
+        timestamp: new Date().toISOString(),
+        totalWallets: balances.length,
+      });
+    }
+
     // Get real USDT balances from blockchain
     logger.info("Fetching real USDT balances from blockchain");
     const balancesWithRealUsdt = await Promise.all(
@@ -77,23 +91,32 @@ export async function GET(request: NextRequest) {
             switch (wallet.chain) {
               case "ethereum":
               case "bsc":
-                // Use ethers.js to call balanceOf on EVM chains
-                const provider = new ethers.JsonRpcProvider(
-                  rpcEndpoints[wallet.chain]
-                );
-                const contract = new ethers.Contract(
-                  usdtContracts[wallet.chain],
-                  usdtAbi,
-                  provider
-                );
+                try {
+                  // Use ethers.js to call balanceOf on EVM chains
+                  const provider = new ethers.JsonRpcProvider(
+                    rpcEndpoints[wallet.chain]
+                  );
+                  const contract = new ethers.Contract(
+                    usdtContracts[wallet.chain],
+                    usdtAbi,
+                    provider
+                  );
 
-                const balance = await contract.balanceOf(wallet.address);
-                const decimals = await contract.decimals();
+                  const balance = await contract.balanceOf(wallet.address);
+                  const decimals = await contract.decimals();
 
-                // Convert from wei to human readable format
-                realUsdtBalance = ethers
-                  .formatUnits(balance, decimals)
-                  .toString();
+                  // Convert from wei to human readable format
+                  realUsdtBalance = ethers
+                    .formatUnits(balance, decimals)
+                    .toString();
+                } catch (error) {
+                  logger.warn(
+                    `Failed to fetch ${wallet.chain} balance:`,
+                    error
+                  );
+                  // Fallback to stored balance if contract call fails
+                  realUsdtBalance = wallet.usdtBalance || "0.00";
+                }
                 break;
 
               case "tron":
