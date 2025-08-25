@@ -163,11 +163,12 @@ export function WalletSelector({
   // Use local state for UI, but keep the prop for external state management
   const currentChainInfo = getChainInfo(localSelectedChain);
 
-  // Generate payment URL with wallet and chain parameters
+  // Generate payment URL with wallet and chain parameters (simplified - only 2 parameters)
   const generatePaymentUrl = () => {
     if (!selectedWallet || !localSelectedChain) return "";
 
     const currentPath = window.location.pathname;
+    const currentOrigin = window.location.origin;
 
     // Map wallet IDs to readable names
     const walletMap: { [key: string]: string } = {
@@ -190,18 +191,18 @@ export function WalletSelector({
     // Generate different URLs based on wallet type
     if (selectedWallet === "metamask") {
       // MetaMask deep link
-      return `https://metamask.app.link/dapp/192.168.17.16:3000${currentPath}?chain=${chainParam}&wallet=${walletParam}&network=${localSelectedChain}`;
+      return `https://metamask.app.link/dapp/${currentOrigin}${currentPath}?chain=${chainParam}&wallet=${walletParam}`;
     } else if (
       selectedWallet === "imtoken" ||
       selectedWallet === "bitpie" ||
       selectedWallet === "tronlink"
     ) {
       // WalletConnect for mobile wallets
-      return `http://192.168.17.16:3000${currentPath}?chain=${chainParam}&wallet=${walletParam}&connect=walletconnect`;
+      return `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=${walletParam}`;
     }
 
     // Fallback to regular URL
-    return `http://192.168.17.16:3000${currentPath}?chain=${chainParam}&wallet=${walletParam}`;
+    return `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=${walletParam}`;
   };
 
   // Generate WalletConnect URI for mobile wallets
@@ -360,73 +361,38 @@ export function WalletSelector({
         </div>
       </div>
 
-      {/* QR Code for Mobile Users */}
+      {/* QR Code for Mobile Users - BIGGER and CLEANER */}
       {showQRCode && selectedWallet && (
         <div className="mb-4 p-4 bg-gray-700/30 rounded-lg border border-gray-600/30">
-          <div className="text-center mb-3">
-            <h4 className="text-white font-semibold text-sm mb-1">
-              {selectedWallet === "metamask"
-                ? "MetaMask 移动端支付"
-                : "移动端扫码支付"}
-            </h4>
-            <p className="text-gray-400 text-xs">
-              {selectedWallet === "metamask"
-                ? "使用 MetaMask 移动端扫描二维码"
-                : `使用 ${selectedWallet} 扫描二维码`}
-            </p>
-          </div>
-
-          {/* Show different QR codes based on wallet type */}
+          {/* Show different QR codes based on wallet type - BIGGER SIZE */}
           {selectedWallet === "metamask" ? (
             // MetaMask deep link QR code
             <div className="flex justify-center">
               <QRCode
                 value={generatePaymentUrl()}
-                size={120}
+                size={200}
                 className="mx-auto"
               />
             </div>
           ) : selectedWallet === "tronlink" ? (
             // TronLink deep link QR code
-            <div className="space-y-3">
-              <div className="flex justify-center">
-                <QRCode
-                  value={generatePaymentUrl()}
-                  size={120}
-                  className="mx-auto"
-                />
-              </div>
+            <div className="flex justify-center">
+              <QRCode
+                value={generatePaymentUrl()}
+                size={200}
+                className="mx-auto"
+              />
             </div>
           ) : (
             // WalletConnect QR code for imToken/Bitpie
-            <div className="space-y-3">
-              <div className="flex justify-center">
-                <QRCode
-                  value={generatePaymentUrl()}
-                  size={120}
-                  className="mx-auto"
-                />
-              </div>
+            <div className="flex justify-center">
+              <QRCode
+                value={generatePaymentUrl()}
+                size={200}
+                className="mx-auto"
+              />
             </div>
           )}
-
-          <div className="mt-3 text-center">
-            <p className="text-gray-400 text-xs">
-              {selectedWallet === "metamask"
-                ? "扫描后将在 MetaMask 移动端打开"
-                : selectedWallet === "tronlink"
-                ? "扫描后将在 TronLink 移动端打开"
-                : "扫描后使用 WalletConnect 连接"}
-            </p>
-            <button
-              onClick={() =>
-                navigator.clipboard.writeText(generatePaymentUrl())
-              }
-              className="mt-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
-            >
-              复制链接
-            </button>
-          </div>
         </div>
       )}
 
