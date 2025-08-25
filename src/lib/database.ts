@@ -13,6 +13,7 @@ import {
   CreatePaymentRequest,
   PaymentStatus,
   ChainType,
+  AdminWalletBalance,
 } from "@/types";
 import { MigrationRunner } from "./migrations";
 import { logInfo, logError } from "./logger";
@@ -423,7 +424,7 @@ class Database {
   }
 
   async getUniqueWalletAddresses(): Promise<
-    { address: string; chain: string }[]
+    { address: string; chain: string | null }[]
   > {
     await this.ensureInitialized();
     if (!this.db) throw new Error("Database not initialized");
@@ -446,7 +447,7 @@ class Database {
 
     return (await all(
       "SELECT DISTINCT wallet_address as address, chain FROM payments WHERE wallet_address IS NOT NULL AND wallet_address != '' ORDER BY chain, address"
-    )) as { address: string; chain: string }[];
+    )) as { address: string; chain: string | null }[];
   }
 
   // Analytics and reporting
@@ -537,6 +538,83 @@ class Database {
     };
   }
 
+  async getWalletBalances(): Promise<AdminWalletBalance[]> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    // Get unique wallet addresses
+    const walletAddresses = await this.getUniqueWalletAddresses();
+
+    // Filter out wallets with null chain and get payment stats for each valid wallet
+    const walletBalances = await Promise.all(
+      walletAddresses
+        .filter((wallet) => wallet.chain !== null) // Filter out null chains
+        .map(async (wallet) => {
+          const stats = await this.getWalletPaymentStats(
+            wallet.address,
+            wallet.chain!
+          );
+
+          // Generate mock balance data (in a real app, you'd fetch from blockchain)
+          const mockBalance = this.generateMockBalance(wallet.chain!, stats);
+
+          return {
+            address: wallet.address,
+            chain: wallet.chain!,
+            balance: mockBalance.native,
+            usdtBalance: mockBalance.usdt,
+            paymentCount: stats.total,
+            lastActivity: stats.lastPaymentDate,
+          };
+        })
+    );
+
+    return walletBalances;
+  }
+
+  // Helper function to generate realistic mock balances based on payment history
+  private generateMockBalance(chain: string, stats: any) {
+    const baseMultiplier = Math.max(1, stats.total || 1);
+    const volumeMultiplier = Math.max(0.1, (stats.totalAmount || 0) / 100);
+
+    let nativeBalance = "0.0";
+    let usdtBalance = "0.0";
+
+    switch (chain) {
+      case "ethereum":
+        nativeBalance = `${(
+          0.01 +
+          Math.random() * 0.5 * baseMultiplier
+        ).toFixed(4)} ETH`;
+        usdtBalance = `${(10 + Math.random() * 1000 * volumeMultiplier).toFixed(
+          2
+        )} USDT`;
+        break;
+      case "bsc":
+        nativeBalance = `${(0.1 + Math.random() * 2 * baseMultiplier).toFixed(
+          4
+        )} BNB`;
+        usdtBalance = `${(5 + Math.random() * 500 * volumeMultiplier).toFixed(
+          2
+        )} USDT`;
+        break;
+      case "tron":
+        nativeBalance = `${(
+          100 +
+          Math.random() * 1000 * baseMultiplier
+        ).toFixed(0)} TRX`;
+        usdtBalance = `${(1 + Math.random() * 100 * volumeMultiplier).toFixed(
+          2
+        )} USDT`;
+        break;
+      default:
+        nativeBalance = "0.0";
+        usdtBalance = "0.0";
+    }
+
+    return { native: nativeBalance, usdt: usdtBalance };
+  }
+
   async close(): Promise<void> {
     if (this.db) {
       const close = promisify(this.db.close.bind(this.db));
@@ -555,6 +633,12 @@ export function getDatabase(): Database {
     dbInstance = new Database();
   }
   return dbInstance;
+}
+
+// Standalone function for getting wallet balances
+export async function getWalletBalances(): Promise<AdminWalletBalance[]> {
+  const db = getDatabase();
+  return await db.getWalletBalances();
 }
 
 export default Database;

@@ -108,6 +108,17 @@ export interface WalletBalance {
   symbol: string;
 }
 
+// Admin Dashboard Wallet Balance Interface
+export interface AdminWalletBalance {
+  address: string;
+  chain: string;
+  balance: string;
+  usdtBalance: string;
+  realUsdtBalance?: string;
+  paymentCount: number;
+  lastActivity: string | null;
+}
+
 // Component Props Types
 export interface WalletConnectProps {
   onConnect: (connection: WalletConnection) => void;

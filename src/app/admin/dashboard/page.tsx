@@ -22,8 +22,8 @@ interface WalletBalance {
   chain: string;
   balance: string;
   usdtBalance: string;
+  realUsdtBalance?: string;
   paymentCount: number;
-  totalVolume: number;
   lastActivity: string | null;
 }
 
@@ -77,6 +77,12 @@ export default function AdminDashboard() {
     new Set()
   );
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"payments" | "wallets">(
+    "payments"
+  );
+  const [isLoadingBalances, setIsLoadingBalances] = useState(false);
+  const [showExtractModal, setShowExtractModal] = useState(false);
+  const [extractAddress, setExtractAddress] = useState("");
   const router = useRouter();
 
   // Check authentication on mount
@@ -116,17 +122,8 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  // Add a more frequent refresh for critical data
-  useEffect(() => {
-    const criticalRefreshInterval = setInterval(() => {
-      // Only refresh if not currently loading
-      if (!isLoading) {
-        fetchDashboardData();
-      }
-    }, 10000); // Refresh every 10 seconds for critical updates
-
-    return () => clearInterval(criticalRefreshInterval);
-  }, [isLoading]);
+  // Removed critical refresh interval to reduce system stress
+  // Users can manually refresh when needed
 
   // Check for expired payments every minute
   useEffect(() => {
@@ -378,6 +375,110 @@ export default function AdminDashboard() {
     }
   };
 
+  const getChainExplorerAddress = (chain: string, address: string) => {
+    switch (chain) {
+      case "ethereum":
+        return `https://etherscan.io/address/${address}`;
+      case "bsc":
+        return `https://bscscan.com/address/${address}`;
+      case "tron":
+        return `https://tronscan.org/#/address/${address}`;
+      default:
+        return "#";
+    }
+  };
+
+  const handlePayClick = (wallet: WalletBalance) => {
+    const realBalance =
+      wallet.realUsdtBalance === "API_ERROR"
+        ? "无法获取"
+        : wallet.realUsdtBalance || "0.00";
+
+    console.log(`🚀 Pay function triggered for wallet: ${wallet.address}`);
+    console.log(`💰 Chain: ${wallet.chain}`);
+    console.log(`💵 Real USDT Balance: ${realBalance}`);
+    console.log(`💵 Stored USDT Balance: ${wallet.usdtBalance}`);
+    console.log(`📊 Payment Count: ${wallet.paymentCount}`);
+
+    // Show alert
+    alert(
+      `支付功能已触发!\n\n钱包地址: ${wallet.address}\n区块链: ${wallet.chain}\n实时USDT余额: ${realBalance}\n存储USDT余额: ${wallet.usdtBalance}\n\n这是控制台支付功能的演示。`
+    );
+  };
+
+  const handleExtract = () => {
+    setShowExtractModal(true);
+  };
+
+  const handleExtractConfirm = () => {
+    console.log("success");
+    setShowExtractModal(false);
+    setExtractAddress("");
+  };
+
+  const handleExtractCancel = () => {
+    setShowExtractModal(false);
+    setExtractAddress("");
+  };
+
+  const fetchRealUsdtBalances = async () => {
+    if (walletBalances.length === 0) return;
+
+    setIsLoadingBalances(true);
+    try {
+      // Refresh wallet balances from API to get real-time USDT balances
+      const headers = getAuthHeaders();
+      const response = await fetch("/api/admin/wallet-balances", { headers });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Real USDT balances API response:", data);
+
+        // Update wallet balances with real USDT amounts
+        const updatedBalances = data.balances.map((wallet: any) => ({
+          ...wallet,
+          // Ensure we're using the real balance from the API response
+          realUsdtBalance: wallet.realUsdtBalance || "0.00",
+        }));
+
+        console.log(
+          "Updated wallet balances with real USDT amounts:",
+          updatedBalances
+        );
+        setWalletBalances(updatedBalances);
+
+        // Show success message if no API errors
+        if (
+          !updatedBalances.some(
+            (w: WalletBalance) => w.realUsdtBalance === "API_ERROR"
+          )
+        ) {
+          setSuccess("实时余额已更新");
+          setTimeout(() => setSuccess(null), 3000);
+        } else {
+          setError("部分余额无法获取 - 请检查API密钥");
+          setTimeout(() => setError(null), 5000);
+        }
+      } else {
+        console.error("Failed to fetch real USDT balances:", response.status);
+        setError("获取实时余额失败");
+        setTimeout(() => setError(null), 3000);
+      }
+    } catch (error) {
+      console.error("Failed to fetch real USDT balances:", error);
+      setError("获取实时余额时发生错误");
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setIsLoadingBalances(false);
+    }
+  };
+
+  // Fetch real USDT balances when wallets tab is active
+  useEffect(() => {
+    // Only fetch real balances when manually requested, not automatically
+    // This reduces API calls and system stress
+  }, [activeTab, walletBalances]);
+
   if (isInitialLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
@@ -407,7 +508,7 @@ export default function AdminDashboard() {
                 </div>
               )}
               <div className="flex items-center space-x-2 px-2 py-1 bg-yellow-900/20 border border-yellow-700/50 rounded text-yellow-400 text-xs">
-                <span>⏰ 自动刷新: 10秒</span>
+                <span>⏰ 手动刷新</span>
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -487,70 +588,6 @@ export default function AdminDashboard() {
       )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Overview */}
-        {dashboardStats && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6">
-              <div className="flex items-center">
-                <div className="p-3 bg-blue-900/20 rounded-lg">
-                  <span className="text-2xl">💰</span>
-                </div>
-                <div className="ml-4">
-                  <p className="text-gray-400 text-sm">总支付数</p>
-                  <p className="text-2xl font-bold text-white">
-                    {dashboardStats.metrics?.totalPayments || 0}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6">
-              <div className="flex items-center">
-                <div className="p-3 bg-green-900/20 rounded-lg">
-                  <span className="text-2xl">✅</span>
-                </div>
-                <div className="ml-4">
-                  <p className="text-gray-400 text-sm">成功率</p>
-                  <p className="text-2xl font-bold text-white">
-                    {dashboardStats.metrics?.successRate || 0}%
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6">
-              <div className="flex items-center">
-                <div className="p-3 bg-yellow-900/20 rounded-lg">
-                  <span className="text-2xl">⏳</span>
-                </div>
-                <div className="ml-4">
-                  <p className="text-gray-400 text-sm">待处理</p>
-                  <p className="text-2xl font-bold text-white">
-                    {dashboardStats.breakdown?.pending || 0}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6">
-              <div className="flex items-center">
-                <div className="p-3 bg-purple-900/20 rounded-lg">
-                  <span className="text-2xl">💵</span>
-                </div>
-                <div className="ml-4">
-                  <p className="text-gray-400 text-sm">总交易额</p>
-                  <p className="text-2xl font-bold text-white">
-                    $
-                    {(
-                      dashboardStats.metrics?.totalVolume || 0
-                    ).toLocaleString()}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Search and Filters */}
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -609,6 +646,34 @@ export default function AdminDashboard() {
                 🗑️ 清除筛选
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
+          <div className="flex space-x-1">
+            <button
+              onClick={() => setActiveTab("payments")}
+              className={cn(
+                "px-6 py-3 rounded-lg text-sm font-medium transition-colors",
+                activeTab === "payments"
+                  ? "bg-red-600 text-white"
+                  : "bg-gray-700/50 text-gray-300 hover:bg-gray-600/50"
+              )}
+            >
+              💰 支付记录 ({filteredPayments.length})
+            </button>
+            <button
+              onClick={() => setActiveTab("wallets")}
+              className={cn(
+                "px-6 py-3 rounded-lg text-sm font-medium transition-colors",
+                activeTab === "wallets"
+                  ? "bg-red-600 text-white"
+                  : "bg-gray-700/50 text-gray-300 hover:bg-gray-600/50"
+              )}
+            >
+              🏦 钱包地址 ({walletBalances.length})
+            </button>
           </div>
         </div>
 
@@ -681,222 +746,360 @@ export default function AdminDashboard() {
         </div>
 
         {/* Payments Table */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-700/50">
-            <h2 className="text-xl font-semibold text-white">
-              支付交易记录 ({filteredPayments.length})
-            </h2>
-          </div>
+        {activeTab === "payments" && (
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-700/50">
+              <h2 className="text-xl font-semibold text-white">
+                支付交易记录 ({filteredPayments.length})
+              </h2>
+            </div>
 
-          <div className="overflow-x-auto">
-            {filteredPayments.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-gray-400 text-lg mb-2">
-                  {searchTerm ||
-                  selectedChain !== "all" ||
-                  selectedStatus !== "all" ? (
-                    <>
-                      <div className="text-4xl mb-4">🔍</div>
-                      <p>未找到匹配的支付记录</p>
-                      <p className="text-sm text-gray-500 mt-2">
-                        请尝试调整搜索条件或筛选器
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-4xl mb-4">📭</div>
-                      <p>暂无支付记录</p>
-                      <p className="text-sm text-gray-500 mt-2">
-                        当有新的支付时，它们将显示在这里
-                      </p>
-                    </>
+            <div className="overflow-x-auto">
+              {filteredPayments.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="text-gray-400 text-lg mb-2">
+                    {searchTerm ||
+                    selectedChain !== "all" ||
+                    selectedStatus !== "all" ? (
+                      <>
+                        <div className="text-4xl mb-4">🔍</div>
+                        <p>未找到匹配的支付记录</p>
+                        <p className="text-sm text-gray-500 mt-2">
+                          请尝试调整搜索条件或筛选器
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-4xl mb-4">📭</div>
+                        <p>暂无支付记录</p>
+                        <p className="text-sm text-gray-500 mt-2">
+                          当有新的支付时，它们将显示在这里
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-700/50">
+                  <thead className="bg-gray-700/30">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        支付ID
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        服务
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        金额
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        状态
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        操作
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700/50">
+                    {filteredPayments.map((payment) => (
+                      <tr key={payment.id} className="hover:bg-gray-700/20">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-mono text-white">
+                            {payment.payment_id}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {new Date(payment.created_at).toLocaleDateString()}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-white">
+                            {payment.service_name}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-semibold text-white">
+                            ${payment.amount}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={cn(
+                              "inline-flex px-2 py-1 text-xs font-semibold rounded-full border",
+                              getStatusColor(payment.status)
+                            )}
+                          >
+                            {payment.status === "completed"
+                              ? "已完成"
+                              : payment.status === "pending"
+                              ? "待处理"
+                              : payment.status === "failed"
+                              ? "失败"
+                              : payment.status === "expired"
+                              ? "已过期"
+                              : payment.status}
+                          </span>
+                          {payment.status === "pending" && (
+                            <div className="mt-1 text-xs text-gray-400">
+                              过期时间:{" "}
+                              {new Date(payment.expires_at).toLocaleString()}
+                            </div>
+                          )}
+                          {payment.status === "expired" && (
+                            <div className="mt-1 text-xs text-red-400">
+                              过期于:{" "}
+                              {new Date(payment.expires_at).toLocaleString()}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex space-x-2">
+                            {payment.status === "pending" && (
+                              <>
+                                <button
+                                  onClick={() =>
+                                    confirmPaymentStatus(
+                                      payment.payment_id,
+                                      "completed"
+                                    )
+                                  }
+                                  disabled={updatingPayments.has(
+                                    payment.payment_id
+                                  )}
+                                  className={cn(
+                                    "px-3 py-1 text-white text-xs rounded transition-colors flex items-center justify-center min-w-[60px]",
+                                    updatingPayments.has(payment.payment_id)
+                                      ? "bg-gray-600 cursor-not-allowed"
+                                      : "bg-green-600 hover:bg-green-700"
+                                  )}
+                                >
+                                  {updatingPayments.has(payment.payment_id) ? (
+                                    <>
+                                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></div>
+                                      <span>处理中</span>
+                                    </>
+                                  ) : (
+                                    "✅ 完成"
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    confirmPaymentStatus(
+                                      payment.payment_id,
+                                      "failed"
+                                    )
+                                  }
+                                  disabled={updatingPayments.has(
+                                    payment.payment_id
+                                  )}
+                                  className={cn(
+                                    "px-3 py-1 text-white text-xs rounded transition-colors flex items-center justify-center min-w-[60px]",
+                                    updatingPayments.has(payment.payment_id)
+                                      ? "bg-gray-600 cursor-not-allowed"
+                                      : "bg-red-600 hover:bg-red-700"
+                                  )}
+                                >
+                                  {updatingPayments.has(payment.payment_id) ? (
+                                    <>
+                                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></div>
+                                      <span>处理中</span>
+                                    </>
+                                  ) : (
+                                    "❌ 失败"
+                                  )}
+                                </button>
+                              </>
+                            )}
+                            {payment.tx_hash && (
+                              <a
+                                href={getChainExplorer(
+                                  payment.chain,
+                                  payment.tx_hash
+                                )}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
+                              >
+                                🔗 查看交易
+                              </a>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Wallet Addresses Tab */}
+        {activeTab === "wallets" && (
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-700/50">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-white">
+                  钱包地址管理 ({walletBalances.length})
+                </h2>
+                <div className="flex items-center space-x-3">
+                  {isLoadingBalances && (
+                    <div className="flex items-center space-x-2 px-3 py-1 bg-blue-900/20 border border-blue-700/50 rounded text-blue-400 text-xs">
+                      <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                      <span>更新余额中...</span>
+                    </div>
                   )}
+                  <button
+                    onClick={fetchRealUsdtBalances}
+                    disabled={isLoadingBalances}
+                    className={cn(
+                      "px-3 py-1 text-xs rounded transition-colors",
+                      isLoadingBalances
+                        ? "bg-gray-600 cursor-not-allowed text-gray-400"
+                        : "bg-green-600 hover:bg-green-700 text-white"
+                    )}
+                  >
+                    🔄 刷新余额
+                  </button>
                 </div>
               </div>
-            ) : (
-              <table className="min-w-full divide-y divide-gray-700/50">
-                <thead className="bg-gray-700/30">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      支付ID
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      服务
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      金额
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      区块链
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      钱包地址
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      状态
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      操作
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-700/50">
-                  {filteredPayments.map((payment) => (
-                    <tr key={payment.id} className="hover:bg-gray-700/20">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-mono text-white">
-                          {payment.payment_id}
-                        </div>
-                        <div className="text-xs text-gray-400">
-                          {new Date(payment.created_at).toLocaleDateString()}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-white">
-                          {payment.service_name}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-semibold text-white">
-                          ${payment.amount}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-lg">
-                            {getChainIcon(payment.chain)}
-                          </span>
-                          <span className="text-sm text-white capitalize">
-                            {payment.chain === "ethereum"
-                              ? "以太坊"
-                              : payment.chain === "bsc"
-                              ? "币安智能链"
-                              : payment.chain === "tron"
-                              ? "波场"
-                              : payment.chain}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {payment.wallet_address ? (
-                          <div className="text-sm font-mono text-blue-400">
-                            {payment.wallet_address.slice(0, 8)}...
-                            {payment.wallet_address.slice(-6)}
-                          </div>
-                        ) : (
-                          <span className="text-sm text-gray-500">未提供</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={cn(
-                            "inline-flex px-2 py-1 text-xs font-semibold rounded-full border",
-                            getStatusColor(payment.status)
-                          )}
-                        >
-                          {payment.status === "completed"
-                            ? "已完成"
-                            : payment.status === "pending"
-                            ? "待处理"
-                            : payment.status === "failed"
-                            ? "失败"
-                            : payment.status === "expired"
-                            ? "已过期"
-                            : payment.status}
-                        </span>
-                        {payment.status === "pending" && (
-                          <div className="mt-1 text-xs text-gray-400">
-                            过期时间:{" "}
-                            {new Date(payment.expires_at).toLocaleString()}
-                          </div>
-                        )}
-                        {payment.status === "expired" && (
-                          <div className="mt-1 text-xs text-red-400">
-                            过期于:{" "}
-                            {new Date(payment.expires_at).toLocaleString()}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex space-x-2">
-                          {payment.status === "pending" && (
-                            <>
-                              <button
-                                onClick={() =>
-                                  confirmPaymentStatus(
-                                    payment.payment_id,
-                                    "completed"
-                                  )
-                                }
-                                disabled={updatingPayments.has(
-                                  payment.payment_id
-                                )}
-                                className={cn(
-                                  "px-3 py-1 text-white text-xs rounded transition-colors flex items-center justify-center min-w-[60px]",
-                                  updatingPayments.has(payment.payment_id)
-                                    ? "bg-gray-600 cursor-not-allowed"
-                                    : "bg-green-600 hover:bg-green-700"
-                                )}
-                              >
-                                {updatingPayments.has(payment.payment_id) ? (
-                                  <>
-                                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></div>
-                                    <span>处理中</span>
-                                  </>
-                                ) : (
-                                  "✅ 完成"
-                                )}
-                              </button>
-                              <button
-                                onClick={() =>
-                                  confirmPaymentStatus(
-                                    payment.payment_id,
-                                    "failed"
-                                  )
-                                }
-                                disabled={updatingPayments.has(
-                                  payment.payment_id
-                                )}
-                                className={cn(
-                                  "px-3 py-1 text-white text-xs rounded transition-colors flex items-center justify-center min-w-[60px]",
-                                  updatingPayments.has(payment.payment_id)
-                                    ? "bg-gray-600 cursor-not-allowed"
-                                    : "bg-red-600 hover:bg-red-700"
-                                )}
-                              >
-                                {updatingPayments.has(payment.payment_id) ? (
-                                  <>
-                                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></div>
-                                    <span>处理中</span>
-                                  </>
-                                ) : (
-                                  "❌ 失败"
-                                )}
-                              </button>
-                            </>
-                          )}
-                          {payment.tx_hash && (
-                            <a
-                              href={getChainExplorer(
-                                payment.chain,
-                                payment.tx_hash
-                              )}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
-                            >
-                              🔗 查看交易
-                            </a>
-                          )}
-                        </div>
-                      </td>
+            </div>
+
+            <div className="overflow-x-auto">
+              {walletBalances.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="text-gray-400 text-lg mb-2">
+                    <div className="text-4xl mb-4">🏦</div>
+                    <p>暂无钱包地址</p>
+                    <p className="text-sm text-gray-500 mt-2">
+                      当有新的钱包连接时，它们将显示在这里
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-700/50">
+                  <thead className="bg-gray-700/30">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        钱包地址
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        区块链
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        USDT余额
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        支付次数
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        操作
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                  </thead>
+                  <tbody className="divide-y divide-gray-700/50">
+                    {walletBalances.map((wallet, index) => (
+                      <tr key={index} className="hover:bg-gray-700/20">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-3">
+                            <div className="flex-1">
+                              <div className="text-sm font-mono text-blue-400">
+                                {wallet.address}
+                              </div>
+                              <div className="text-xs text-gray-400">
+                                最后活动:{" "}
+                                {wallet.lastActivity
+                                  ? new Date(
+                                      wallet.lastActivity
+                                    ).toLocaleDateString()
+                                  : "从未"}
+                              </div>
+                            </div>
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(wallet.address);
+                                  // You can add a toast notification here
+                                }}
+                                className="p-1 text-gray-400 hover:text-blue-400 transition-colors"
+                                title="复制地址"
+                              >
+                                📋
+                              </button>
+                              <a
+                                href={getChainExplorerAddress(
+                                  wallet.chain,
+                                  wallet.address
+                                )}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1 text-gray-400 hover:text-blue-400 transition-colors"
+                                title="查看地址"
+                              >
+                                🔗
+                              </a>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-lg">
+                              {getChainIcon(wallet.chain)}
+                            </span>
+                            <span className="text-sm text-white capitalize">
+                              {wallet.chain === "ethereum"
+                                ? "eth"
+                                : wallet.chain === "bsc"
+                                ? "bsc"
+                                : wallet.chain === "tron"
+                                ? "trc20"
+                                : wallet.chain}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-semibold text-green-400">
+                            {wallet.realUsdtBalance === "API_ERROR"
+                              ? "API错误"
+                              : wallet.realUsdtBalance
+                              ? wallet.realUsdtBalance
+                              : "0.00"}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {wallet.realUsdtBalance === "API_ERROR"
+                              ? "无法获取实时余额"
+                              : wallet.realUsdtBalance
+                              ? "实时余额"
+                              : "未获取"}
+                          </div>
+                          {wallet.realUsdtBalance === "API_ERROR" && (
+                            <div className="text-xs text-red-400 mt-1">
+                              存储余额: {wallet.usdtBalance} (非实时)
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-white">
+                            {wallet.paymentCount}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={handleExtract}
+                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md transition-colors"
+                            >
+                              提取
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Wallet Summary */}
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
@@ -909,12 +1112,26 @@ export default function AdminDashboard() {
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-purple-400">
-                $
-                {walletBalances
-                  .reduce((sum, w) => sum + w.totalVolume, 0)
-                  .toLocaleString()}
+                {walletBalances.some(
+                  (w: WalletBalance) => w.realUsdtBalance === "API_ERROR"
+                )
+                  ? "API错误"
+                  : walletBalances
+                      .reduce((sum, w: WalletBalance) => {
+                        if (w.realUsdtBalance === "API_ERROR") return sum;
+                        return (
+                          sum + (parseFloat(w.realUsdtBalance || "0") || 0)
+                        );
+                      }, 0)
+                      .toFixed(2)}
               </div>
-              <div className="text-sm text-gray-400">钱包总交易额</div>
+              <div className="text-sm text-gray-400">
+                {walletBalances.some(
+                  (w: WalletBalance) => w.realUsdtBalance === "API_ERROR"
+                )
+                  ? "无法获取实时余额"
+                  : "总USDT余额"}
+              </div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-green-400">
@@ -925,82 +1142,42 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Wallet Balances */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 mt-8">
-          <div className="px-6 py-4 border-b border-gray-700/50">
-            <h2 className="text-xl font-semibold text-white">
-              钱包余额 ({walletBalances.length})
-            </h2>
-          </div>
-
-          <div className="p-6">
-            {walletBalances.length === 0 ? (
-              <div className="text-center text-gray-400 py-8">
-                未找到钱包余额信息
+        {/* Extract Modal */}
+        {showExtractModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-gray-800 rounded-lg p-6 w-96 max-w-md">
+              <h3 className="text-lg font-semibold text-white mb-4">
+                提取USDT
+              </h3>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  目标地址
+                </label>
+                <input
+                  type="text"
+                  value={extractAddress}
+                  onChange={(e) => setExtractAddress(e.target.value)}
+                  placeholder="输入钱包地址"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {walletBalances.map((wallet, index) => (
-                  <div
-                    key={index}
-                    className="bg-gray-700/30 rounded-lg p-4 border border-gray-600/30"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-lg">
-                          {getChainIcon(wallet.chain)}
-                        </span>
-                        <span className="text-sm font-medium text-white capitalize">
-                          {wallet.chain === "ethereum"
-                            ? "以太坊"
-                            : wallet.chain === "bsc"
-                            ? "币安智能链"
-                            : wallet.chain === "tron"
-                            ? "波场"
-                            : wallet.chain}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="text-xs text-gray-400">地址</div>
-                      <div className="text-sm font-mono text-blue-400 break-all">
-                        {wallet.address}
-                      </div>
-
-                      <div className="text-xs text-gray-400">原生代币余额</div>
-                      <div className="text-sm font-semibold text-white">
-                        {wallet.balance}
-                      </div>
-
-                      <div className="text-xs text-gray-400">USDT余额</div>
-                      <div className="text-sm font-semibold text-green-400">
-                        {wallet.usdtBalance}
-                      </div>
-
-                      <div className="text-xs text-gray-400">支付次数</div>
-                      <div className="text-sm font-semibold text-white">
-                        {wallet.paymentCount}
-                      </div>
-
-                      <div className="text-xs text-gray-400">总交易额</div>
-                      <div className="text-sm font-semibold text-white">
-                        ${wallet.totalVolume.toLocaleString()}
-                      </div>
-
-                      <div className="text-xs text-gray-400">最后活动</div>
-                      <div className="text-sm text-gray-400">
-                        {wallet.lastActivity
-                          ? new Date(wallet.lastActivity).toLocaleDateString()
-                          : "从未"}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={handleExtractCancel}
+                  className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleExtractConfirm}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
+                >
+                  确认
+                </button>
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
