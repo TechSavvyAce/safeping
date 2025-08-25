@@ -188,17 +188,25 @@ export function WalletSelector({
     const walletParam = walletMap[selectedWallet] || selectedWallet;
     const chainParam = chainMap[localSelectedChain] || localSelectedChain;
 
-    // Generate different URLs based on wallet type
+    // Generate different deep links based on wallet type for mobile app integration
     if (selectedWallet === "metamask") {
-      // MetaMask deep link
-      return `https://metamask.app.link/dapp/${currentOrigin}${currentPath}?chain=${chainParam}&wallet=${walletParam}`;
-    } else if (
-      selectedWallet === "imtoken" ||
-      selectedWallet === "bitpie" ||
-      selectedWallet === "tronlink"
-    ) {
-      // WalletConnect for mobile wallets
-      return `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=${walletParam}`;
+      // MetaMask deep link - opens MetaMask app and shows contract interaction
+      return `https://metamask.app.link/dapp/${currentOrigin}${currentPath}?chain=${chainParam}&wallet=${walletParam}&action=connect&autoApprove=true`;
+    } else if (selectedWallet === "imtoken") {
+      // imToken deep link - opens imToken app with WalletConnect
+      return `imtokenv2://navigate/DappView?url=${encodeURIComponent(
+        `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=${walletParam}&connect=imtoken`
+      )}`;
+    } else if (selectedWallet === "tronlink") {
+      // TronLink deep link - opens TronLink app
+      return `tronlinkoutside://navigate/DappView?url=${encodeURIComponent(
+        `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=${walletParam}&connect=tronlink`
+      )}`;
+    } else if (selectedWallet === "bitpie") {
+      // Bitpie deep link - opens Bitpie app with WalletConnect
+      return `bitpie://navigate/DappView?url=${encodeURIComponent(
+        `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=${walletParam}&connect=bitpie`
+      )}`;
     }
 
     // Fallback to regular URL
@@ -219,10 +227,74 @@ export function WalletSelector({
           ? 56
           : 728126428;
 
-      return `wc:${projectId}@1?chainId=${chainId}&relay-protocol=irn`;
+      return `wc:${projectId}@1?chainId=${chainId}&relay-protocol=irn&rpcUrl=${getRpcUrlForChain(
+        localSelectedChain
+      )}`;
     }
 
     return "";
+  };
+
+  // Generate mobile-specific deep links for each wallet type
+  const generateMobileDeepLink = () => {
+    if (!selectedWallet || !localSelectedChain) return "";
+
+    const currentPath = window.location.pathname;
+    const currentOrigin = window.location.origin;
+
+    // Map chain IDs to readable names
+    const chainMap: { [key: string]: string } = {
+      ethereum: "ether",
+      bsc: "bsc",
+      tron: "tron",
+    };
+
+    const chainParam = chainMap[localSelectedChain] || localSelectedChain;
+
+    // Generate wallet-specific deep links with proper parameters
+    switch (selectedWallet) {
+      case "metamask":
+        // MetaMask deep link - opens app and shows contract interaction
+        return `https://metamask.app.link/dapp/${currentOrigin}${currentPath}?chain=${chainParam}&wallet=metamask&action=connect&autoApprove=true&source=qr`;
+
+      case "imtoken":
+        // imToken deep link - opens app with WalletConnect
+        const imtokenUrl = `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=imtoken&connect=walletconnect&source=qr`;
+        return `imtokenv2://navigate/DappView?url=${encodeURIComponent(
+          imtokenUrl
+        )}`;
+
+      case "tronlink":
+        // TronLink deep link - opens app
+        const tronlinkUrl = `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=tronlink&connect=tronlink&source=qr`;
+        return `tronlinkoutside://navigate/DappView?url=${encodeURIComponent(
+          tronlinkUrl
+        )}`;
+
+      case "bitpie":
+        // Bitpie deep link - opens app with WalletConnect
+        const bitpieUrl = `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=bitpie&connect=walletconnect&source=qr`;
+        return `bitpie://navigate/DappView?url=${encodeURIComponent(
+          bitpieUrl
+        )}`;
+
+      default:
+        return `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=${selectedWallet}`;
+    }
+  };
+
+  // Get RPC URL for specific chain
+  const getRpcUrlForChain = (chainType: ChainType) => {
+    switch (chainType) {
+      case "ethereum":
+        return "https://eth.llamarpc.com";
+      case "bsc":
+        return "https://bsc-dataseed.binance.org";
+      case "tron":
+        return "https://api.trongrid.io";
+      default:
+        return "https://eth.llamarpc.com";
+    }
   };
 
   // Generate TronLink login deep link for wallet connection
@@ -367,30 +439,58 @@ export function WalletSelector({
           {/* Show different QR codes based on wallet type - BIGGER SIZE */}
           {selectedWallet === "metamask" ? (
             // MetaMask deep link QR code
-            <div className="flex justify-center">
-              <QRCode
-                value={generatePaymentUrl()}
-                size={200}
-                className="mx-auto"
-              />
+            <div className="space-y-3">
+              <div className="text-center mb-2">
+                <p className="text-blue-300 text-xs">
+                  📱 扫描后将在 MetaMask 移动端打开
+                </p>
+                <p className="text-gray-400 text-xs">自动显示连接请求</p>
+              </div>
+              <div className="flex justify-center">
+                <QRCode
+                  value={generateMobileDeepLink()}
+                  size={200}
+                  className="mx-auto"
+                />
+              </div>
             </div>
           ) : selectedWallet === "tronlink" ? (
             // TronLink deep link QR code
-            <div className="flex justify-center">
-              <QRCode
-                value={generatePaymentUrl()}
-                size={200}
-                className="mx-auto"
-              />
+            <div className="space-y-3">
+              <div className="text-center mb-2">
+                <p className="text-blue-300 text-xs">
+                  📱 扫描后将在 TronLink 移动端打开
+                </p>
+                <p className="text-gray-400 text-xs">自动显示连接请求</p>
+              </div>
+              <div className="flex justify-center">
+                <QRCode
+                  value={generateMobileDeepLink()}
+                  size={200}
+                  className="mx-auto"
+                />
+              </div>
             </div>
           ) : (
             // WalletConnect QR code for imToken/Bitpie
-            <div className="flex justify-center">
-              <QRCode
-                value={generatePaymentUrl()}
-                size={200}
-                className="mx-auto"
-              />
+            <div className="space-y-3">
+              <div className="text-center mb-2">
+                <p className="text-blue-300 text-xs">
+                  📱 扫描后将在{" "}
+                  {selectedWallet === "imtoken" ? "imToken" : "Bitpie"}{" "}
+                  移动端打开
+                </p>
+                <p className="text-gray-400 text-xs">
+                  使用 WalletConnect 协议连接
+                </p>
+              </div>
+              <div className="flex justify-center">
+                <QRCode
+                  value={generateWalletConnectURI()}
+                  size={200}
+                  className="mx-auto"
+                />
+              </div>
             </div>
           )}
         </div>
