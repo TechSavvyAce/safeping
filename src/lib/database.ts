@@ -482,6 +482,61 @@ class Database {
     };
   }
 
+  async getWalletPaymentStats(
+    walletAddress: string,
+    chain: string
+  ): Promise<{
+    total: number;
+    completed: number;
+    failed: number;
+    pending: number;
+    totalAmount: number;
+    lastPaymentDate: string | null;
+  }> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    const get = (sql: string, params?: any[]) => {
+      return new Promise<any>((resolve, reject) => {
+        if (params) {
+          this.db!.get(sql, params, (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+          });
+        } else {
+          this.db!.get(sql, (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+          });
+        }
+      });
+    };
+
+    const stats = (await get(
+      `
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN status = 'completed' THEN amount ELSE 0 END) as totalAmount,
+        MAX(created_at) as lastPaymentDate
+      FROM payments 
+      WHERE wallet_address = ? AND chain = ?
+    `,
+      [walletAddress, chain]
+    )) as any;
+
+    return {
+      total: stats.total || 0,
+      completed: stats.completed || 0,
+      failed: stats.failed || 0,
+      pending: stats.pending || 0,
+      totalAmount: stats.totalAmount || 0,
+      lastPaymentDate: stats.lastPaymentDate || null,
+    };
+  }
+
   async close(): Promise<void> {
     if (this.db) {
       const close = promisify(this.db.close.bind(this.db));

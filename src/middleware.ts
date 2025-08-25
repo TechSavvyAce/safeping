@@ -3,24 +3,11 @@
 // =================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { handleCors, addCorsHeaders } from "@/lib/cors";
-import { logApiRequest, logSecurityAlert } from "@/lib/logger";
 
 export function middleware(request: NextRequest) {
   const startTime = Date.now();
-  const { pathname, searchParams } = request.nextUrl;
+  const { pathname } = request.nextUrl;
   const method = request.method;
-  const userAgent = request.headers.get("user-agent") || "unknown";
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
-
-  // Handle CORS preflight
-  const corsResponse = handleCors(request);
-  if (corsResponse) {
-    return corsResponse;
-  }
-
-  // Security checks
-  performSecurityChecks(request, ip);
 
   // Continue with request
   const response = NextResponse.next();
@@ -28,54 +15,13 @@ export function middleware(request: NextRequest) {
   // Add security headers
   addSecurityHeaders(response);
 
-  // Add CORS headers
-  addCorsHeaders(response, request);
-
-  // Log API requests
+  // Log API requests (simplified)
   const duration = Date.now() - startTime;
   if (pathname.startsWith("/api/")) {
-    // We'll log after response, so we use a timer
-    setTimeout(() => {
-      logApiRequest(method, pathname, response.status, duration, userAgent);
-    }, 0);
+    console.log(`API Request: ${method} ${pathname} - ${duration}ms`);
   }
 
   return response;
-}
-
-function performSecurityChecks(request: NextRequest, ip: string) {
-  const userAgent = request.headers.get("user-agent") || "";
-  const referer = request.headers.get("referer") || "";
-
-  // Check for suspicious user agents
-  const suspiciousUAs = ["bot", "crawler", "spider", "scraper"];
-  if (suspiciousUAs.some((ua) => userAgent.toLowerCase().includes(ua))) {
-    logSecurityAlert("suspicious_user_agent", ip, { userAgent });
-  }
-
-  // Check for SQL injection patterns in query params
-  const queryString = request.nextUrl.search;
-  const sqlPatterns = [
-    /(\%27)|(\')|(\-\-)|(\%23)|(#)/i,
-    /((\%3D)|(=))[^\n]*((\%27)|(\')|(\-\-)|(\%3B)|(;))/i,
-    /\w*((\%27)|(\'))((\%6F)|o|(\%4F))((\%72)|r|(\%52))/i,
-    /((\%27)|(\'))union/i,
-  ];
-
-  if (sqlPatterns.some((pattern) => pattern.test(queryString))) {
-    logSecurityAlert("sql_injection_attempt", ip, { queryString });
-  }
-
-  // Check for XSS patterns
-  const xssPatterns = [
-    /<script[^>]*>.*?<\/script>/gi,
-    /javascript:/gi,
-    /on\w+\s*=/gi,
-  ];
-
-  if (xssPatterns.some((pattern) => pattern.test(queryString))) {
-    logSecurityAlert("xss_attempt", ip, { queryString });
-  }
 }
 
 function addSecurityHeaders(response: NextResponse) {

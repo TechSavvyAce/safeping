@@ -3,9 +3,6 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/utils/cn";
-import { env } from "process";
-const ADMIN_USERNAME = env.ADMIN_USERNAME;
-const ADMIN_PASSWORD = env.ADMIN_PASSWORD;
 
 export default function AdminLogin() {
   const [username, setUsername] = useState("");
@@ -19,17 +16,31 @@ export default function AdminLogin() {
     setError("");
     setIsLoading(true);
 
-    console.log(ADMIN_USERNAME, ADMIN_PASSWORD);
-    // Hardcoded credentials check
-    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-      // Set admin session
-      localStorage.setItem("adminAuthenticated", "true");
-      localStorage.setItem("adminLoginTime", Date.now().toString());
+    try {
+      const response = await fetch("/api/admin/auth", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+      });
 
-      // Redirect to dashboard
-      router.push("/admin/dashboard");
-    } else {
-      setError("Invalid credentials. Please try again.");
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Set admin session
+        localStorage.setItem("adminAuthenticated", "true");
+        localStorage.setItem("adminLoginTime", Date.now().toString());
+
+        // Redirect to dashboard
+        router.push("/admin/dashboard");
+      } else {
+        setError(data.error || "Invalid credentials. Please try again.");
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      setError("Login failed. Please try again.");
       setIsLoading(false);
     }
   };

@@ -3,7 +3,7 @@
 // =================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { isDevelopment } from "@/lib/env-validation";
+import { isDevelopment } from "./env-validation";
 
 export function corsHeaders(origin?: string): Record<string, string> {
   const isDev = isDevelopment();

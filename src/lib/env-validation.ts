@@ -58,6 +58,10 @@ const envSchema = z.object({
   // Contract deployment (for scripts only)
   PRIVATE_KEY: z.string().optional(),
 
+  // Admin credentials
+  ADMIN_USERNAME: z.string().default("admin"),
+  ADMIN_PASSWORD: z.string().default("admin123"),
+
   // Logging (optional)
   LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).default("info"),
   ENABLE_REQUEST_LOGGING: z

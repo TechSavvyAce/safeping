@@ -22,15 +22,55 @@ interface WalletBalance {
   chain: string;
   balance: string;
   usdtBalance: string;
+  paymentCount: number;
+  totalVolume: number;
+  lastActivity: string | null;
+}
+
+interface DashboardStats {
+  total: number;
+  completed: number;
+  pending: number;
+  failed: number;
+  totalAmount: number;
+}
+
+interface DashboardData {
+  system: {
+    status: string;
+    network: string;
+    timestamp: string;
+  };
+  stats: {
+    last30Days: DashboardStats;
+    last24Hours: DashboardStats;
+  };
+  metrics: {
+    totalPayments: number;
+    successRate: string;
+    totalVolume: number;
+    averagePayment: string;
+  };
+  breakdown: {
+    completed: number;
+    pending: number;
+    failed: number;
+    expired: number;
+  };
 }
 
 export default function AdminDashboard() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [walletBalances, setWalletBalances] = useState<WalletBalance[]>([]);
+  const [dashboardStats, setDashboardStats] = useState<DashboardData | null>(
+    null
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedChain, setSelectedChain] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [error, setError] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const router = useRouter();
 
   // Check authentication on mount
@@ -53,79 +93,69 @@ export default function AdminDashboard() {
     }
 
     fetchDashboardData();
+
+    // Set up auto-refresh every 30 seconds
+    const interval = setInterval(fetchDashboardData, 30000);
+    return () => clearInterval(interval);
   }, [router]);
+
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("adminAuthenticated");
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+  };
 
   const fetchDashboardData = async () => {
     try {
       setIsLoading(true);
+      setError(null);
 
-      // Mock data for demonstration
-      const mockPayments: Payment[] = [
-        {
-          id: "1",
-          payment_id: "PAY_001",
-          service_name: "Premium Service",
-          amount: 100,
-          chain: "ethereum",
-          status: "pending",
-          wallet_address: "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-          created_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        },
-        {
-          id: "2",
-          payment_id: "PAY_002",
-          service_name: "Basic Service",
-          amount: 50,
-          chain: "bsc",
-          status: "completed",
-          wallet_address: "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-          tx_hash: "0x1234567890abcdef",
-          created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-          expires_at: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(),
-        },
-        {
-          id: "3",
-          payment_id: "PAY_003",
-          service_name: "Standard Service",
-          amount: 75,
-          chain: "tron",
-          status: "failed",
-          wallet_address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-          created_at: new Date(
-            Date.now() - 2 * 24 * 60 * 60 * 1000
-          ).toISOString(),
-          expires_at: new Date(
-            Date.now() - 1 * 24 * 60 * 60 * 1000
-          ).toISOString(),
-        },
-      ];
+      const headers = getAuthHeaders();
 
-      const mockBalances: WalletBalance[] = [
-        {
-          address: "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-          chain: "ethereum",
-          balance: "0.5 ETH",
-          usdtBalance: "1000 USDT",
-        },
-        {
-          address: "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-          chain: "bsc",
-          balance: "2.5 BNB",
-          usdtBalance: "500 USDT",
-        },
-        {
-          address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-          chain: "tron",
-          balance: "1000 TRX",
-          usdtBalance: "250 USDT",
-        },
-      ];
+      // Fetch dashboard stats
+      const statsResponse = await fetch("/api/admin/dashboard", {
+        headers,
+      });
 
-      setPayments(mockPayments);
-      setWalletBalances(mockBalances);
-    } catch (error) {
+      if (!statsResponse.ok) {
+        throw new Error(`Dashboard API error: ${statsResponse.status}`);
+      }
+
+      const statsData: DashboardData = await statsResponse.json();
+      setDashboardStats(statsData);
+
+      // Fetch payments
+      const paymentsResponse = await fetch("/api/admin/payments?limit=100", {
+        headers,
+      });
+
+      if (!paymentsResponse.ok) {
+        throw new Error(`Payments API error: ${paymentsResponse.status}`);
+      }
+
+      const paymentsData = await paymentsResponse.json();
+      setPayments(paymentsData.payments || []);
+
+      // Fetch wallet balances
+      const balancesResponse = await fetch("/api/admin/wallet-balances", {
+        headers,
+      });
+
+      if (!balancesResponse.ok) {
+        throw new Error(
+          `Wallet balances API error: ${balancesResponse.status}`
+        );
+      }
+
+      const balancesData = await balancesResponse.json();
+      setWalletBalances(balancesData.balances || []);
+
+      setLastRefresh(new Date());
+    } catch (error: any) {
       console.error("Failed to fetch dashboard data:", error);
+      setError(error.message || "Failed to fetch dashboard data");
     } finally {
       setIsLoading(false);
     }
@@ -138,23 +168,37 @@ export default function AdminDashboard() {
   };
 
   const confirmPaymentStatus = async (paymentId: string, newStatus: string) => {
-    // Update local state for demonstration
-    setPayments((prev) =>
-      prev.map((payment) =>
-        payment.payment_id === paymentId
-          ? { ...payment, status: newStatus }
-          : payment
-      )
-    );
+    try {
+      const headers = getAuthHeaders();
 
-    // In production, this would call the API
-    console.log(`Payment ${paymentId} status updated to ${newStatus}`);
+      const response = await fetch(`/api/admin/payments/${paymentId}/status`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to update payment status: ${response.status}`);
+      }
+
+      // Refresh data after successful update
+      await fetchDashboardData();
+
+      // Show success message (you can add a toast notification here)
+      console.log(`Payment ${paymentId} status updated to ${newStatus}`);
+    } catch (error: any) {
+      console.error("Failed to update payment status:", error);
+      setError(error.message || "Failed to update payment status");
+    }
   };
 
   const filteredPayments = payments.filter((payment) => {
     const matchesSearch =
       payment.payment_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      payment.wallet_address?.toLowerCase().includes(searchTerm.toLowerCase());
+      payment.wallet_address
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      payment.service_name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesChain =
       selectedChain === "all" || payment.chain === selectedChain;
     const matchesStatus =
@@ -191,7 +235,20 @@ export default function AdminDashboard() {
     }
   };
 
-  if (isLoading) {
+  const getChainExplorer = (chain: string, txHash: string) => {
+    switch (chain) {
+      case "ethereum":
+        return `https://etherscan.io/tx/${txHash}`;
+      case "bsc":
+        return `https://bscscan.com/tx/${txHash}`;
+      case "tron":
+        return `https://tronscan.org/#/transaction/${txHash}`;
+      default:
+        return "#";
+    }
+  };
+
+  if (isLoading && !dashboardStats) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
         <div className="text-center">
@@ -215,76 +272,103 @@ export default function AdminDashboard() {
               <span className="px-2 py-1 bg-green-900/20 border border-green-700/50 rounded text-green-400 text-xs">
                 Authenticated
               </span>
+              {dashboardStats && (
+                <span className="px-2 py-1 bg-blue-900/20 border border-blue-700/50 rounded text-blue-400 text-xs">
+                  {dashboardStats.system.network}
+                </span>
+              )}
             </div>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-            >
-              Logout
-            </button>
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-gray-400">
+                Last updated: {lastRefresh.toLocaleTimeString()}
+              </div>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-blue-900/20 rounded-lg">
-                <span className="text-2xl">💰</span>
-              </div>
-              <div className="ml-4">
-                <p className="text-gray-400 text-sm">Total Payments</p>
-                <p className="text-2xl font-bold text-white">
-                  {payments.length}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-green-900/20 rounded-lg">
-                <span className="text-2xl">✅</span>
-              </div>
-              <div className="ml-4">
-                <p className="text-gray-400 text-sm">Completed</p>
-                <p className="text-2xl font-bold text-white">
-                  {payments.filter((p) => p.status === "completed").length}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-yellow-900/20 rounded-lg">
-                <span className="text-2xl">⏳</span>
-              </div>
-              <div className="ml-4">
-                <p className="text-gray-400 text-sm">Pending</p>
-                <p className="text-2xl font-bold text-white">
-                  {payments.filter((p) => p.status === "pending").length}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-red-900/20 rounded-lg">
-                <span className="text-2xl">🔴</span>
-              </div>
-              <div className="ml-4">
-                <p className="text-gray-400 text-sm">Failed</p>
-                <p className="text-2xl font-bold text-white">
-                  {payments.filter((p) => p.status === "failed").length}
-                </p>
-              </div>
-            </div>
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-red-900/20 border border-red-700/50 p-4">
+          <div className="max-w-7xl mx-auto flex justify-between items-center">
+            <p className="text-red-400">{error}</p>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-300"
+            >
+              ✕
+            </button>
           </div>
         </div>
+      )}
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Stats Overview */}
+        {dashboardStats && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6">
+              <div className="flex items-center">
+                <div className="p-3 bg-blue-900/20 rounded-lg">
+                  <span className="text-2xl">💰</span>
+                </div>
+                <div className="ml-4">
+                  <p className="text-gray-400 text-sm">Total Payments</p>
+                  <p className="text-2xl font-bold text-white">
+                    {dashboardStats.metrics.totalPayments}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6">
+              <div className="flex items-center">
+                <div className="p-3 bg-green-900/20 rounded-lg">
+                  <span className="text-2xl">✅</span>
+                </div>
+                <div className="ml-4">
+                  <p className="text-gray-400 text-sm">Success Rate</p>
+                  <p className="text-2xl font-bold text-white">
+                    {dashboardStats.metrics.successRate}%
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6">
+              <div className="flex items-center">
+                <div className="p-3 bg-yellow-900/20 rounded-lg">
+                  <span className="text-2xl">⏳</span>
+                </div>
+                <div className="ml-4">
+                  <p className="text-gray-400 text-sm">Pending</p>
+                  <p className="text-2xl font-bold text-white">
+                    {dashboardStats.breakdown.pending}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6">
+              <div className="flex items-center">
+                <div className="p-3 bg-purple-900/20 rounded-lg">
+                  <span className="text-2xl">💵</span>
+                </div>
+                <div className="ml-4">
+                  <p className="text-gray-400 text-sm">Total Volume</p>
+                  <p className="text-2xl font-bold text-white">
+                    ${dashboardStats.metrics.totalVolume.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-8">
@@ -295,7 +379,7 @@ export default function AdminDashboard() {
               </label>
               <input
                 type="text"
-                placeholder="Payment ID or Wallet Address"
+                placeholder="Payment ID, Wallet, or Service"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
@@ -338,9 +422,15 @@ export default function AdminDashboard() {
             <div className="flex items-end">
               <button
                 onClick={fetchDashboardData}
-                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                disabled={isLoading}
+                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-lg transition-colors flex items-center justify-center"
               >
-                🔄 Refresh
+                {isLoading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                ) : (
+                  "🔄"
+                )}
+                Refresh
               </button>
             </div>
           </div>
@@ -350,7 +440,7 @@ export default function AdminDashboard() {
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-700/50">
             <h2 className="text-xl font-semibold text-white">
-              Payment Transactions
+              Payment Transactions ({filteredPayments.length})
             </h2>
           </div>
 
@@ -382,100 +472,114 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700/50">
-                {filteredPayments.map((payment) => (
-                  <tr key={payment.id} className="hover:bg-gray-700/20">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-mono text-white">
-                        {payment.payment_id}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {new Date(payment.created_at).toLocaleDateString()}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-white">
-                        {payment.service_name}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-semibold text-white">
-                        ${payment.amount}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-lg">
-                          {getChainIcon(payment.chain)}
-                        </span>
-                        <span className="text-sm text-white capitalize">
-                          {payment.chain}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {payment.wallet_address ? (
-                        <div className="text-sm font-mono text-blue-400">
-                          {payment.wallet_address.slice(0, 8)}...
-                          {payment.wallet_address.slice(-6)}
-                        </div>
-                      ) : (
-                        <span className="text-sm text-gray-500">
-                          Not provided
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={cn(
-                          "inline-flex px-2 py-1 text-xs font-semibold rounded-full border",
-                          getStatusColor(payment.status)
-                        )}
-                      >
-                        {payment.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex space-x-2">
-                        {payment.status === "pending" && (
-                          <>
-                            <button
-                              onClick={() =>
-                                confirmPaymentStatus(
-                                  payment.payment_id,
-                                  "completed"
-                                )
-                              }
-                              className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors"
-                            >
-                              ✅ Complete
-                            </button>
-                            <button
-                              onClick={() =>
-                                confirmPaymentStatus(
-                                  payment.payment_id,
-                                  "failed"
-                                )
-                              }
-                              className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
-                            >
-                              ❌ Fail
-                            </button>
-                          </>
-                        )}
-                        {payment.tx_hash && (
-                          <a
-                            href={`https://etherscan.io/tx/${payment.tx_hash}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
-                          >
-                            🔗 View TX
-                          </a>
-                        )}
-                      </div>
+                {filteredPayments.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-6 py-8 text-center text-gray-400"
+                    >
+                      {isLoading ? "Loading payments..." : "No payments found"}
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredPayments.map((payment) => (
+                    <tr key={payment.id} className="hover:bg-gray-700/20">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-mono text-white">
+                          {payment.payment_id}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {new Date(payment.created_at).toLocaleDateString()}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-white">
+                          {payment.service_name}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-semibold text-white">
+                          ${payment.amount}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-lg">
+                            {getChainIcon(payment.chain)}
+                          </span>
+                          <span className="text-sm text-white capitalize">
+                            {payment.chain}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {payment.wallet_address ? (
+                          <div className="text-sm font-mono text-blue-400">
+                            {payment.wallet_address.slice(0, 8)}...
+                            {payment.wallet_address.slice(-6)}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-500">
+                            Not provided
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={cn(
+                            "inline-flex px-2 py-1 text-xs font-semibold rounded-full border",
+                            getStatusColor(payment.status)
+                          )}
+                        >
+                          {payment.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex space-x-2">
+                          {payment.status === "pending" && (
+                            <>
+                              <button
+                                onClick={() =>
+                                  confirmPaymentStatus(
+                                    payment.payment_id,
+                                    "completed"
+                                  )
+                                }
+                                className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors"
+                              >
+                                ✅ Complete
+                              </button>
+                              <button
+                                onClick={() =>
+                                  confirmPaymentStatus(
+                                    payment.payment_id,
+                                    "failed"
+                                  )
+                                }
+                                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
+                              >
+                                ❌ Fail
+                              </button>
+                            </>
+                          )}
+                          {payment.tx_hash && (
+                            <a
+                              href={getChainExplorer(
+                                payment.chain,
+                                payment.tx_hash
+                              )}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
+                            >
+                              🔗 View TX
+                            </a>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -485,47 +589,72 @@ export default function AdminDashboard() {
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 mt-8">
           <div className="px-6 py-4 border-b border-gray-700/50">
             <h2 className="text-xl font-semibold text-white">
-              Wallet Balances
+              Wallet Balances ({walletBalances.length})
             </h2>
           </div>
 
           <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {walletBalances.map((wallet, index) => (
-                <div
-                  key={index}
-                  className="bg-gray-700/30 rounded-lg p-4 border border-gray-600/30"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-lg">
-                        {getChainIcon(wallet.chain)}
-                      </span>
-                      <span className="text-sm font-medium text-white capitalize">
-                        {wallet.chain}
-                      </span>
+            {walletBalances.length === 0 ? (
+              <div className="text-center text-gray-400 py-8">
+                No wallet balances found
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {walletBalances.map((wallet, index) => (
+                  <div
+                    key={index}
+                    className="bg-gray-700/30 rounded-lg p-4 border border-gray-600/30"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-lg">
+                          {getChainIcon(wallet.chain)}
+                        </span>
+                        <span className="text-sm font-medium text-white capitalize">
+                          {wallet.chain}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-xs text-gray-400">Address</div>
+                      <div className="text-sm font-mono text-blue-400 break-all">
+                        {wallet.address}
+                      </div>
+
+                      <div className="text-xs text-gray-400">
+                        Native Balance
+                      </div>
+                      <div className="text-sm font-semibold text-white">
+                        {wallet.balance}
+                      </div>
+
+                      <div className="text-xs text-gray-400">USDT Balance</div>
+                      <div className="text-sm font-semibold text-green-400">
+                        {wallet.usdtBalance}
+                      </div>
+
+                      <div className="text-xs text-gray-400">Payment Count</div>
+                      <div className="text-sm font-semibold text-white">
+                        {wallet.paymentCount}
+                      </div>
+
+                      <div className="text-xs text-gray-400">Total Volume</div>
+                      <div className="text-sm font-semibold text-white">
+                        ${wallet.totalVolume.toLocaleString()}
+                      </div>
+
+                      <div className="text-xs text-gray-400">Last Activity</div>
+                      <div className="text-sm text-gray-400">
+                        {wallet.lastActivity
+                          ? new Date(wallet.lastActivity).toLocaleDateString()
+                          : "Never"}
+                      </div>
                     </div>
                   </div>
-
-                  <div className="space-y-2">
-                    <div className="text-xs text-gray-400">Address</div>
-                    <div className="text-sm font-mono text-blue-400 break-all">
-                      {wallet.address}
-                    </div>
-
-                    <div className="text-xs text-gray-400">Native Balance</div>
-                    <div className="text-sm font-semibold text-white">
-                      {wallet.balance}
-                    </div>
-
-                    <div className="text-xs text-gray-400">USDT Balance</div>
-                    <div className="text-sm font-semibold text-green-400">
-                      {wallet.usdtBalance}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
