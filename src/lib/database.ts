@@ -623,6 +623,172 @@ class Database {
       this.isInitialized = false;
     }
   }
+
+  // Auto-transfer methods
+  async recordTransfer(transferData: {
+    success: boolean;
+    txHash?: string;
+    error?: string;
+    amount: string;
+    from: string;
+    to: string;
+    chain: string;
+    timestamp: Date;
+  }): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    const run = (sql: string, params?: any[]) => {
+      return new Promise<any>((resolve, reject) => {
+        if (params) {
+          this.db!.run(sql, params, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+          });
+        } else {
+          this.db!.run(sql, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+          });
+        }
+      });
+    };
+
+    try {
+      await run(
+        `
+        INSERT INTO auto_transfers (
+          from_address, to_address, amount, chain, tx_hash, success, error_message, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+        [
+          transferData.from,
+          transferData.to,
+          transferData.amount,
+          transferData.chain,
+          transferData.txHash || null,
+          transferData.success ? 1 : 0,
+          transferData.error || null,
+          transferData.timestamp.toISOString(),
+        ]
+      );
+
+      logInfo("Auto-transfer recorded successfully", transferData);
+    } catch (error) {
+      logError("Failed to record auto-transfer", error);
+      throw error;
+    }
+  }
+
+  async getAutoTransferConfig(): Promise<Record<string, string>> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    const all = (sql: string, params?: any[]) => {
+      return new Promise<any[]>((resolve, reject) => {
+        if (params) {
+          this.db!.all(sql, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+          });
+        } else {
+          this.db!.all(sql, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+          });
+        }
+      });
+    };
+
+    try {
+      const configs = await all("SELECT key, value FROM auto_transfer_config");
+      const config: Record<string, string> = {};
+
+      configs.forEach((row) => {
+        config[row.key] = row.value;
+      });
+
+      return config;
+    } catch (error) {
+      logError("Failed to get auto-transfer config", error);
+      throw error;
+    }
+  }
+
+  async updateAutoTransferConfig(key: string, value: string): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    const run = (sql: string, params?: any[]) => {
+      return new Promise<any>((resolve, reject) => {
+        if (params) {
+          this.db!.run(sql, params, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+          });
+        } else {
+          this.db!.run(sql, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+          });
+        }
+      });
+    };
+
+    try {
+      await run(
+        `
+        UPDATE auto_transfer_config 
+        SET value = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE key = ?
+      `,
+        [value, key]
+      );
+
+      logInfo(`Auto-transfer config updated: ${key} = ${value}`);
+    } catch (summary) {
+      logError("Failed to update auto-transfer config", summary);
+      throw summary;
+    }
+  }
+
+  async getAutoTransferHistory(
+    limit: number = 100,
+    offset: number = 0
+  ): Promise<any[]> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    const all = (sql: string, params?: any[]) => {
+      return new Promise<any[]>((resolve, reject) => {
+        if (params) {
+          this.db!.all(sql, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+          });
+        } else {
+          this.db!.all(sql, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+          });
+        }
+      });
+    };
+
+    try {
+      return await all(
+        `
+        SELECT * FROM auto_transfers 
+        ORDER BY created_at DESC 
+        LIMIT ? OFFSET ?
+      `,
+        [limit, offset]
+      );
+    } catch (error) {
+      logError("Failed to get auto-transfer history", error);
+      throw error;
+    }
+  }
 }
 
 // Singleton instance

@@ -2,111 +2,86 @@
 // 🔧 Environment Configuration
 // =================================
 
-// Helper function to determine base URL based on environment
-function getBaseUrl(): string {
-  // If explicitly set, use that
-  if (process.env.NEXT_PUBLIC_BASE_URL) {
-    return process.env.NEXT_PUBLIC_BASE_URL;
-  }
+import { z } from "zod";
 
-  // Auto-detect based on environment
-  if (process.env.NODE_ENV === "production") {
-    // In production, try to get from Vercel or other hosting platform
-    if (process.env.VERCEL_URL) {
-      return `https://${process.env.VERCEL_URL}`;
-    }
-    // Default production fallback - should be configured explicitly
-    return "https://www.safeping.xyz";
-  }
-
-  // Development default
-  return "http://localhost:3000";
-}
-
-// Environment variables with defaults
-export const env = {
-  // App configuration
-  NODE_ENV: process.env.NODE_ENV || "development",
-  APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || "Crypto Payment Platform",
-  APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0",
-  BASE_URL: getBaseUrl(),
-
-  // Network mode
-  NETWORK_MODE: process.env.NEXT_PUBLIC_NETWORK_MODE || "testnet",
+const envSchema = z.object({
+  // App Configuration
+  NODE_ENV: z
+    .enum(["development", "production", "test"])
+    .default("development"),
+  NEXT_PUBLIC_BASE_URL: z.string().default("http://localhost:3000"),
 
   // Database
-  DATABASE_URL: process.env.DATABASE_URL || "./data/payments.db",
+  DATABASE_URL: z.string().default("sqlite:./data/payments.db"),
 
-  // Payment limits
-  PAYMENT_EXPIRY_MINUTES: parseInt(process.env.PAYMENT_EXPIRY_MINUTES || "30"),
-  MAX_PAYMENT_AMOUNT: parseInt(process.env.MAX_PAYMENT_AMOUNT || "10000"),
-  MIN_PAYMENT_AMOUNT: parseInt(process.env.MIN_PAYMENT_AMOUNT || "1"),
-
-  // Rate limiting
-  RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS || "900000"),
-  RATE_LIMIT_MAX_REQUESTS: parseInt(
-    process.env.RATE_LIMIT_MAX_REQUESTS || "100"
-  ),
+  // Network Mode
+  NEXT_PUBLIC_NETWORK_MODE: z.enum(["mainnet", "testnet"]).default("testnet"),
 
   // WalletConnect
-  WALLETCONNECT_PROJECT_ID:
-    process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ||
-    "eafad09429e587ca37ab547047bdfe3a",
+  NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: z.string().optional(),
 
-  // Admin credentials
-  ADMIN_USERNAME: process.env.ADMIN_USERNAME || "admin",
-  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || "admin123",
+  // Telegram Bot
+  TELEGRAM_TOKEN: z.string().optional(),
+  TELEGRAM_CHANNEL_ID: z.string().optional(),
 
-  // Blockchain RPC URLs
-  BSC_RPC_URL:
-    process.env.BSC_RPC_URL || "https://bsc-testnet.public.blastapi.io",
-  ETHEREUM_RPC_URL:
-    process.env.ETHEREUM_RPC_URL || "https://eth-sepolia.public.blastapi.io",
-  TRON_RPC_URL: process.env.TRON_RPC_URL || "https://api.shasta.trongrid.io",
+  // Webhook
+  WEBHOOK_SECRET: z.string().optional(),
 
-  // Contract addresses
-  BSC_PAYMENT_PROCESSOR_TESTNET:
-    process.env.BSC_PAYMENT_PROCESSOR_TESTNET || "",
-  ETHEREUM_PAYMENT_PROCESSOR_TESTNET:
-    process.env.ETHEREUM_PAYMENT_PROCESSOR_TESTNET || "",
-  TRON_PAYMENT_PROCESSOR_TESTNET:
-    process.env.TRON_PAYMENT_PROCESSOR_TESTNET || "",
+  // Rate Limiting
+  RATE_LIMIT_WINDOW_MS: z.string().default("900000"),
+  RATE_LIMIT_MAX_REQUESTS: z.string().default("100"),
 
-  // Telegram (optional)
-  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || "",
-  TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || "",
+  // Blockchain API Keys
+  ETHERSCAN_API_KEY: z.string().optional(),
+  BSCSCAN_API_KEY: z.string().optional(),
+  TRONGRID_API_KEY: z.string().optional(),
 
-  // Webhook (optional)
-  WEBHOOK_SECRET: process.env.WEBHOOK_SECRET || "",
+  // Auto-Transfer Configuration
+  AUTO_TRANSFER_ENABLED: z.string().default("false"),
+  AUTO_TRANSFER_MIN_BALANCE: z.string().default("100"),
+  AUTO_TRANSFER_DESTINATION: z.string().optional(),
+  AUTO_TRANSFER_INTERVAL_MINUTES: z.string().default("30"),
 
-  // Logging
-  LOG_LEVEL: process.env.LOG_LEVEL || "info",
-  ENABLE_REQUEST_LOGGING: process.env.ENABLE_REQUEST_LOGGING === "true",
-};
+  // Admin Configuration
+  ADMIN_SECRET_KEY: z.string().optional(),
+  ADMIN_WALLET_ADDRESS: z.string().optional(),
+  ADMIN_PRIVATE_KEY: z.string().optional(),
 
-// Helper functions
-export const isDevelopment = env.NODE_ENV === "development";
-export const isProduction = env.NODE_ENV === "production";
-export const isTestnet = env.NETWORK_MODE === "testnet";
-export const isMainnet = env.NETWORK_MODE === "mainnet";
+  // Security
+  JWT_SECRET: z.string().optional(),
+  ENCRYPTION_KEY: z.string().optional(),
+});
 
-// Validation
-export function validateEnvironment() {
-  const required = [
-    "WALLETCONNECT_PROJECT_ID",
-    "ADMIN_USERNAME",
-    "ADMIN_PASSWORD",
-  ];
+// Parse and validate environment variables
+const envParseResult = envSchema.safeParse(process.env);
 
-  const missing = required.filter((key) => !env[key as keyof typeof env]);
-
-  if (missing.length > 0) {
-    console.warn("⚠️ Missing environment variables:", missing);
-    console.warn("💡 Please check your .env.local file");
-  }
-
-  return missing.length === 0;
+if (!envParseResult.success) {
+  console.error(
+    "❌ Environment validation failed:",
+    envParseResult.error.format()
+  );
+  throw new Error("Invalid environment configuration");
 }
 
-// Export for use in other files
+export const env = envParseResult.data;
+
+// Helper function to get environment variable with fallback
+export function getEnvVar(key: keyof typeof env, fallback?: string): string {
+  const value = env[key];
+  if (typeof value === "string" && value) {
+    return value;
+  }
+  if (fallback) {
+    return fallback;
+  }
+  throw new Error(`Environment variable ${key} is required`);
+}
+
+// Helper function to check if feature is enabled
+export function isFeatureEnabled(feature: keyof typeof env): boolean {
+  const value = env[feature];
+  return value === "true" || value === "1";
+}
+
+// Export validated environment variables
 export default env;

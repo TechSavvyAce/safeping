@@ -1,310 +1,288 @@
-# 🚀 Crypto Payment Platform
+# 🚀 Crypto Payment Platform - Next.js
 
-A **production-ready, professional-grade cryptocurrency payment platform** built with Next.js 14, supporting secure USDT payments across multiple blockchain networks.
-
-[![Next.js](https://img.shields.io/badge/Next.js-15.4.6-black)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
-[![Production Ready](https://img.shields.io/badge/Production-Ready-green)](#)
+A comprehensive, production-ready cryptocurrency payment platform built with Next.js, supporting multiple blockchain networks with automatic transfer capabilities.
 
 ## ✨ Features
 
-### 💳 **Multi-Chain Payment Support**
+### 🔐 **Core Payment System**
 
-- **BSC (Binance Smart Chain)** - Fast and low-cost payments
-- **Ethereum** - Maximum security and liquidity
-- **TRON** - Energy-efficient transactions
-- **USDT Token Support** across all networks
+- **Multi-Chain Support**: Ethereum, BSC, Tron networks
+- **USDT Payments**: Secure USDT token processing
+- **Smart Contracts**: Optimized payment processor contracts
+- **Real-time Status**: Live payment tracking and updates
 
-### 🔒 **Enterprise Security**
+### 💰 **Auto-Transfer System** (NEW!)
 
-- Rate limiting and DDoS protection
-- Input validation and sanitization
-- Secure headers and CSRF protection
-- Environment-based configuration management
-- Professional logging and monitoring
+- **Automatic Balance Management**: Monitors wallet balances continuously
+- **Smart Transfers**: Automatically transfers funds when thresholds are met
+- **Configurable Rules**: Set minimum balances, transfer amounts, and intervals
+- **Admin Control**: Full control panel for managing auto-transfer settings
+- **Transaction History**: Complete audit trail of all transfers
 
-### 🌐 **Professional UI/UX**
+### 🏦 **Admin Dashboard**
 
-- Beautiful, intuitive payment interface
-- Mobile-first responsive design
-- QR code support for mobile payments
-- Multi-language support (English/Chinese)
-- Dark mode throughout the application
+- **Payment Management**: View, filter, and manage all payments
+- **Wallet Monitoring**: Real-time balance tracking across all networks
+- **Auto-Transfer Control**: Start/stop and configure auto-transfer service
+- **Analytics**: Comprehensive payment statistics and reporting
+- **Real-time Updates**: Live data refresh and notifications
 
-### 🛠 **Developer Experience**
+### 🔔 **Notification System**
 
-- Type-safe development with TypeScript
-- Comprehensive testing framework
-- Hot reloading and development tools
-- Professional project structure
-- Extensive documentation
+- **Telegram Integration**: Real-time payment and transfer notifications
+- **Webhook Support**: Custom webhook endpoints for external integrations
+- **Multi-level Alerts**: Info, warning, and error notifications
+
+### 🛡️ **Security & Performance**
+
+- **Rate Limiting**: Advanced API protection
+- **Content Security Policy**: Secure resource loading
+- **Database Migrations**: Version-controlled schema management
+- **Health Monitoring**: Comprehensive system health checks
+- **Error Handling**: Robust error handling and logging
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- **Node.js** 18.x or later
-- **npm** 9.x or later
+- Node.js 18+
+- npm or yarn
+- SQLite (included)
+- Blockchain wallet with testnet/mainnet access
 
-### Development Setup
+### Installation
 
 1. **Clone the repository**
 
-   ```bash
-   git clone <repository-url>
-   cd crypto-payment-nextjs
-   ```
+```bash
+git clone <repository-url>
+cd crypto-payment-nextjs
+```
 
 2. **Install dependencies**
 
-   ```bash
-   npm install
-   ```
+```bash
+npm install
+```
 
 3. **Configure environment**
 
-   ```bash
-   cp env.example .env.local
-   # Edit .env.local with your configuration
-   ```
-
-4. **Initialize database**
-
-   ```bash
-   npm run db:migrate
-   ```
-
-5. **Start development server**
-
-   ```bash
-   npm run dev
-   ```
-
-6. **Open in browser**
-   ```
-   http://localhost:3000
-   ```
-
-### Production Deployment
-
-For production deployment, see our comprehensive guides:
-
-- [🚀 Production Deployment Guide](PRODUCTION_GUIDE.md)
-- [📋 Production Checklist](PRODUCTION_CHECKLIST.md)
-- [🔧 Mainnet Deployment](DEPLOYMENT_CHECKLIST.md)
-
-**Quick Node.js deployment:**
-
 ```bash
-# Deploy with Node.js
-./scripts/deploy.sh
-
-# Check health
-curl http://localhost:3000/api/health
+cp env.example .env.local
 ```
 
-## 📁 Project Structure
+4. **Update environment variables**
 
-```
-crypto-payment-nextjs/
-├── src/
-│   ├── app/                 # Next.js app router
-│   │   ├── api/            # API routes
-│   │   ├── generate/       # Payment generation
-│   │   └── pay/           # Payment processing
-│   ├── components/         # React components
-│   │   ├── payment/       # Payment-specific components
-│   │   ├── mobile/        # Mobile-optimized components
-│   │   └── ui/           # Reusable UI components
-│   ├── lib/               # Core libraries
-│   │   ├── blockchain.ts  # Blockchain service
-│   │   ├── database.ts    # Database layer
-│   │   ├── wallet.ts      # Wallet management
-│   │   └── logger.ts      # Logging system
-│   ├── hooks/             # React hooks
-│   ├── config/            # Configuration
-│   └── types/             # TypeScript types
-├── public/                # Static assets
-├── scripts/               # Deployment scripts
-├── data/                  # Database files
-└── contracts/             # Smart contracts (external)
-```
+```env
+# App Configuration
+NEXT_PUBLIC_BASE_URL="http://localhost:3000"
+NEXT_PUBLIC_NETWORK_MODE="testnet"
 
-## 🔧 Configuration
+# WalletConnect
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID="your_project_id"
 
-### Environment Variables
+# Telegram Bot (optional)
+TELEGRAM_TOKEN="your_bot_token"
+TELEGRAM_CHANNEL_ID="your_channel_id"
 
-Key environment variables for production:
+# Auto-Transfer Configuration
+AUTO_TRANSFER_ENABLED="true"
+AUTO_TRANSFER_MIN_BALANCE="100"
+AUTO_TRANSFER_DESTINATION="your_destination_address"
+AUTO_TRANSFER_INTERVAL_MINUTES="30"
 
-```bash
-# Network Mode
-NEXT_PUBLIC_NETWORK_MODE=mainnet
+# Admin Configuration
+ADMIN_SECRET_KEY="your_admin_secret"
+ADMIN_WALLET_ADDRESS="your_admin_wallet"
+ADMIN_PRIVATE_KEY="your_private_key"
 
-# Security
-WEBHOOK_SECRET=your-secure-secret
-JWT_SECRET=your-jwt-secret
-
-# Mainnet Contracts (deploy these first)
-BSC_PAYMENT_PROCESSOR_MAINNET=0x...
-ETHEREUM_PAYMENT_PROCESSOR_MAINNET=0x...
-TRON_PAYMENT_PROCESSOR_MAINNET=TXyz...
-
-# Treasury
-TREASURY_ADDRESS=your-treasury-address
+# Blockchain API Keys
+ETHERSCAN_API_KEY="your_etherscan_key"
+BSCSCAN_API_KEY="your_bscscan_key"
+TRONGRID_API_KEY="your_trongrid_key"
 ```
 
-See [env.example](env.example) for complete configuration.
-
-### Database Management
-
-```bash
-# Run migrations
-npm run db:migrate
-
-# Check status
-npm run db:status
-
-# Reset database (DANGER)
-npm run db:reset
-```
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-npm test
-
-# Run tests with UI
-npm run test:ui
-
-# Run tests with coverage
-npm run test:coverage
-
-# Watch mode
-npm run test:watch
-```
-
-## 📊 API Documentation
-
-### Core Endpoints
-
-| Endpoint                   | Method | Description            |
-| -------------------------- | ------ | ---------------------- |
-| `/api/health`              | GET    | System health check    |
-| `/api/config`              | GET    | Frontend configuration |
-| `/api/payment/create`      | POST   | Create new payment     |
-| `/api/payment/[id]`        | GET    | Get payment details    |
-| `/api/payment/[id]/status` | GET    | Payment status         |
-| `/api/webhook`             | POST   | Test webhook endpoint  |
-
-### Payment Flow
-
-1. **Create Payment** → `POST /api/payment/create`
-2. **Get Payment Details** → `GET /api/payment/{id}`
-3. **User Selects Chain** → `PATCH /api/payment/{id}/update-chain`
-4. **Process Payment** → `POST /api/payment/{id}/process`
-5. **Monitor Status** → `GET /api/payment/{id}/status`
-
-## 🔗 Blockchain Integration
-
-### Supported Networks
-
-| Network     | Chain ID | USDT Contract                                | Status   |
-| ----------- | -------- | -------------------------------------------- | -------- |
-| BSC Mainnet | 56       | `0x55d398326f99059fF775485246999027B3197955` | ✅ Ready |
-| Ethereum    | 1        | `0xdAC17F958D2ee523a2206206994597C13D831ec7` | ✅ Ready |
-| TRON        | -        | `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`         | ✅ Ready |
-
-### Wallet Support
-
-- **MetaMask** (BSC, Ethereum)
-- **TronLink** (TRON)
-- **ImToken** (All networks)
-- **WalletConnect** (Coming soon)
-
-## 🛡️ Security Features
-
-- **Rate Limiting**: Configurable per endpoint
-- **CORS Protection**: Origin validation
-- **Input Validation**: Zod schema validation
-- **SQL Injection Protection**: Parameterized queries
-- **XSS Protection**: Content Security Policy
-- **HTTPS Enforcement**: SSL/TLS required
-- **Security Headers**: Comprehensive header set
-
-## 📈 Performance
-
-### Optimizations
-
-- **Static Generation** where possible
-- **Image Optimization** with Next.js
-- **Bundle Optimization** with tree shaking
-- **Database Indexing** for fast queries
-- **Caching Strategies** for API responses
-
-### Monitoring
-
-- **Health Check Endpoints**: `/api/health`
-- **Performance Tracking**: Response times
-- **Error Monitoring**: Comprehensive logging
-- **Database Metrics**: Query performance
-
-## 🌍 Internationalization
-
-Supported languages:
-
-- **English** (en)
-- **中文** (Chinese - zh)
-
-Add new languages by extending `src/lib/i18n.ts`.
-
-## 🚀 Node.js Deployment
-
-### Development
+5. **Run the development server**
 
 ```bash
 npm run dev
 ```
 
-### Production
+6. **Access the application**
+
+- **Frontend**: http://localhost:3000
+- **Admin Dashboard**: http://localhost:3000/admin
+- **Health Check**: http://localhost:3000/api/health
+
+## 🏗️ Architecture
+
+### **Frontend Layer**
+
+- **Next.js 14**: App Router with TypeScript
+- **Tailwind CSS**: Modern, responsive UI design
+- **Wallet Integration**: MetaMask, WalletConnect, TronLink support
+- **Real-time Updates**: Live payment status and balance monitoring
+
+### **Backend Layer**
+
+- **API Routes**: RESTful API endpoints
+- **Database**: SQLite with migration system
+- **Blockchain Integration**: Multi-chain support with ethers.js
+- **Auto-Transfer Service**: Automated wallet management
+
+### **Smart Contracts**
+
+- **PaymentProcessor**: Optimized payment processing
+- **Multi-Chain**: Deployed on Ethereum, BSC, and Tron
+- **Gas Optimization**: Efficient transaction handling
+- **Security**: Audited and tested contracts
+
+## 🔧 Configuration
+
+### **Auto-Transfer Settings**
+
+```typescript
+// Configure automatic transfers
+const config = {
+  enabled: true,
+  minBalance: 100, // Minimum USDT balance before transfer
+  destinationAddress: "0x...", // Where to send funds
+  intervalMinutes: 30, // Check frequency
+  maxTransferAmount: 1000, // Maximum transfer per transaction
+  gasLimit: 300000,
+  gasPrice: "20000000000", // 20 Gwei
+};
+```
+
+### **Supported Networks**
+
+- **Ethereum**: Mainnet & Sepolia testnet
+- **BSC**: Mainnet & BSC testnet
+- **Tron**: Mainnet & Shasta testnet
+
+### **Payment Flow**
+
+1. **Create Payment**: Generate payment request with unique ID
+2. **User Approval**: User approves USDT spending
+3. **Payment Processing**: Smart contract processes payment
+4. **Confirmation**: Transaction confirmed on blockchain
+5. **Auto-Transfer**: Optional automatic fund consolidation
+
+## 📊 Admin Dashboard
+
+### **Payment Management**
+
+- View all payments with filtering and search
+- Update payment statuses
+- Monitor payment statistics
+- Handle expired payments automatically
+
+### **Wallet Management**
+
+- Real-time balance monitoring
+- Multi-chain wallet support
+- Payment history tracking
+- Balance refresh capabilities
+
+### **Auto-Transfer Control**
+
+- Service status monitoring
+- Start/stop auto-transfer service
+- Configuration management
+- Transfer history and logs
+
+## 🔌 API Endpoints
+
+### **Public APIs**
+
+- `GET /api/health` - System health check
+- `POST /api/payment/create` - Create new payment
+- `GET /api/payment/[id]` - Get payment details
+- `GET /api/payment/[id]/status` - Get payment status
+
+### **Admin APIs**
+
+- `GET /api/admin/payments` - List all payments
+- `PUT /api/admin/payments/[id]/status` - Update payment status
+- `GET /api/admin/wallet-balances` - Get wallet balances
+- `GET /api/admin/auto-transfer` - Get auto-transfer status
+- `POST /api/admin/auto-transfer` - Control auto-transfer service
+
+### **Webhook**
+
+- `POST /api/webhook` - Payment confirmation webhooks
+
+## 🧪 Testing
+
+### **Run Tests**
+
+```bash
+npm run test
+npm run test:watch
+npm run test:coverage
+```
+
+### **Test Coverage**
+
+- Unit tests for all components
+- Integration tests for API endpoints
+- Blockchain interaction tests
+- Auto-transfer service tests
+
+## 🚀 Deployment
+
+### **Production Build**
 
 ```bash
 npm run build
 npm start
 ```
 
-Or use the deployment script:
+### **Environment Variables**
+
+- Set `NODE_ENV=production`
+- Configure production database
+- Set secure admin credentials
+- Configure production blockchain networks
+
+### **Docker Support**
 
 ```bash
-./scripts/deploy.sh
+docker build -t crypto-payment .
+docker run -p 3000:3000 crypto-payment
 ```
 
-Includes:
+## 📈 Monitoring & Health
 
-- Production build optimization
-- Health checks
-- Process management
-- Logging and monitoring
+### **Health Checks**
 
-## 📝 Scripts
+- Database connectivity
+- Auto-transfer service status
+- Telegram service status
+- System resource monitoring
 
-| Script               | Description              |
-| -------------------- | ------------------------ |
-| `npm run dev`        | Start development server |
-| `npm run build`      | Production build         |
-| `npm run start`      | Start production server  |
-| `npm run lint`       | Run ESLint               |
-| `npm test`           | Run tests                |
-| `npm run db:migrate` | Run database migrations  |
-| `npm run deploy`     | Deploy to production     |
+### **Logging**
+
+- Structured logging with levels
+- Error tracking and reporting
+- Performance monitoring
+- Audit trail for all operations
+
+## 🔒 Security Features
+
+- **Rate Limiting**: API protection against abuse
+- **CSP Headers**: Content Security Policy
+- **Input Validation**: Comprehensive data validation
+- **SQL Injection Protection**: Parameterized queries
+- **XSS Protection**: Secure rendering and sanitization
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Submit a pull request
 
 ## 📄 License
 
@@ -312,31 +290,19 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🆘 Support
 
-### Documentation
+- **Documentation**: Check this README and inline code comments
+- **Issues**: Report bugs via GitHub Issues
+- **Discussions**: Use GitHub Discussions for questions
+- **Security**: Report security issues privately
 
-- [Production Guide](PRODUCTION_GUIDE.md)
-- [Deployment Checklist](DEPLOYMENT_CHECKLIST.md)
-- [Project Summary](PROJECT_SUMMARY.md)
+## 🎯 Roadmap
 
-### Getting Help
-
-- Check the documentation first
-- Search existing issues
-- Create new issue with detailed description
-- Join our community discussions
-
-## 🎉 Success Stories
-
-This platform is **production-ready** and handles:
-
-- ✅ **Multi-chain payments** across BSC, Ethereum, TRON
-- ✅ **Enterprise security** with comprehensive protection
-- ✅ **Professional UI/UX** for user confidence
-- ✅ **Scalable architecture** for business growth
-- ✅ **Complete monitoring** for operational excellence
+- [ ] **Multi-token Support**: Support for additional cryptocurrencies
+- [ ] **Advanced Analytics**: Enhanced reporting and insights
+- [ ] **Mobile App**: React Native mobile application
+- [ ] **DeFi Integration**: Yield farming and staking features
+- [ ] **Cross-chain Bridges**: Interoperability between networks
 
 ---
 
-**Ready to launch your crypto payment platform?** 🚀
-
-Start with the [Production Checklist](PRODUCTION_CHECKLIST.md) and follow the [Deployment Guide](PRODUCTION_GUIDE.md) for a smooth launch.
+**Built with ❤️ using Next.js, TypeScript, and modern web technologies**

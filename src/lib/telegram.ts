@@ -2,15 +2,7 @@
 // 📱 Telegram Bot Notification Service
 // =================================
 
-// Load environment variables from .env files
-try {
-  require("dotenv").config();
-} catch (error) {
-  // dotenv not available, continue without it
-  console.log(
-    "📝 Note: dotenv not available, using system environment variables"
-  );
-}
+import { env } from "@/config/env";
 
 interface TelegramMessage {
   text: string;
@@ -42,13 +34,11 @@ class TelegramService {
   };
 
   constructor() {
-    // Get Telegram config directly from process.env without full validation
+    // Get Telegram config from validated environment
     this.config = {
-      token: process.env.TELEGRAM_TOKEN,
-      channelId: process.env.TELEGRAM_CHANNEL_ID,
-      isEnabled: !!(
-        process.env.TELEGRAM_TOKEN && process.env.TELEGRAM_CHANNEL_ID
-      ),
+      token: env.TELEGRAM_TOKEN,
+      channelId: env.TELEGRAM_CHANNEL_ID,
+      isEnabled: !!(env.TELEGRAM_TOKEN && env.TELEGRAM_CHANNEL_ID),
     };
 
     // Debug logging
@@ -102,84 +92,140 @@ class TelegramService {
   }
 
   /**
+   * Send payment notification
+   */
+  async sendPaymentNotification(data: {
+    paymentId: string;
+    amount: string;
+    chain: string;
+    status: string;
+    userAddress?: string;
+    txHash?: string;
+  }): Promise<boolean> {
+    const message =
+      `💳 *Payment Update*\n\n` +
+      `🆔 ID: \`${data.paymentId}\`\n` +
+      `💰 Amount: ${data.amount} USDT\n` +
+      `⛓️ Chain: ${data.chain}\n` +
+      `📊 Status: ${data.status}\n` +
+      `👤 User: ${data.userAddress || "N/A"}\n` +
+      `🔗 TX: ${data.txHash || "N/A"}\n\n` +
+      `⏰ ${new Date().toISOString()}`;
+
+    return this.sendMessage({
+      text: message,
+      parse_mode: "Markdown",
+    });
+  }
+
+  /**
    * Send wallet connection notification
    */
-  async notifyWalletConnect(data: WalletConnectNotification): Promise<boolean> {
-    const message = `🔗 <b>Wallet Connected</b>
-
-💰 <b>Wallet:</b> ${data.walletType}
-🌐 <b>Chain:</b> ${data.chain}
-👤 <b>Address:</b> <code>${data.userAddress}</code>
-⏰ <b>Time:</b> ${data.timestamp}
-
-#WalletConnect #${data.chain} #${data.walletType}`;
+  async sendWalletConnectNotification(
+    data: WalletConnectNotification
+  ): Promise<boolean> {
+    const message =
+      `🔗 *Wallet Connected*\n\n` +
+      `📱 Type: ${data.walletType}\n` +
+      `⛓️ Chain: ${data.chain}\n` +
+      `👤 Address: \`${data.userAddress}\`\n` +
+      `⏰ Time: ${data.timestamp}`;
 
     return this.sendMessage({
       text: message,
-      parse_mode: "HTML",
+      parse_mode: "Markdown",
     });
   }
 
   /**
-   * Send approve success notification
+   * Send approval success notification
    */
-  async notifyApproveSuccess(
+  async sendApproveSuccessNotification(
     data: ApproveSuccessNotification
   ): Promise<boolean> {
-    const message = `✅ <b>Token Approval Successful</b>
-
-💰 <b>Wallet:</b> ${data.walletType}
-🌐 <b>Chain:</b> ${data.chain}
-👤 <b>Address:</b> <code>${data.userAddress}</code>
-💎 <b>Amount:</b> ${data.amount} ${data.token}
-⏰ <b>Time:</b> ${data.timestamp}
-
-#ApprovalSuccess #${data.chain} #${data.token}`;
+    const message =
+      `✅ *Approval Successful*\n\n` +
+      `📱 Wallet: ${data.walletType}\n` +
+      `⛓️ Chain: ${data.chain}\n` +
+      `👤 User: \`${data.userAddress}\`\n` +
+      `💰 Amount: ${data.amount} ${data.token}\n` +
+      `⏰ Time: ${data.timestamp}`;
 
     return this.sendMessage({
       text: message,
-      parse_mode: "HTML",
+      parse_mode: "Markdown",
     });
   }
 
   /**
-   * Send custom notification
+   * Send system alert
    */
-  async sendCustomNotification(
-    title: string,
-    content: string,
-    tags: string[] = []
+  async sendSystemAlert(
+    message: string,
+    level: "info" | "warning" | "error" = "info"
   ): Promise<boolean> {
-    const tagString =
-      tags.length > 0 ? `\n\n${tags.map((tag) => `#${tag}`).join(" ")}` : "";
+    const emoji = {
+      info: "ℹ️",
+      warning: "⚠️",
+      error: "❌",
+    };
 
-    const message = `📢 <b>${title}</b>
-
-${content}${tagString}`;
+    const formattedMessage = `${
+      emoji[level]
+    } *System Alert*\n\n${message}\n\n⏰ ${new Date().toISOString()}`;
 
     return this.sendMessage({
-      text: message,
-      parse_mode: "HTML",
+      text: formattedMessage,
+      parse_mode: "Markdown",
     });
   }
 
   /**
-   * Check if Telegram service is enabled
+   * Send auto-transfer notification
    */
-  isEnabled(): boolean {
+  async sendAutoTransferNotification(data: {
+    from: string;
+    to: string;
+    amount: string;
+    chain: string;
+    txHash: string;
+    success: boolean;
+  }): Promise<boolean> {
+    const status = data.success ? "✅" : "❌";
+    const message =
+      `${status} *Auto-Transfer ${
+        data.success ? "Successful" : "Failed"
+      }*\n\n` +
+      `💰 Amount: ${data.amount} USDT\n` +
+      `⛓️ Chain: ${data.chain}\n` +
+      `📤 From: \`${data.from}\`\n` +
+      `📥 To: \`${data.to}\`\n` +
+      `🔗 TX: \`${data.txHash}\`\n\n` +
+      `⏰ ${new Date().toISOString()}`;
+
+    return this.sendMessage({
+      text: message,
+      parse_mode: "Markdown",
+    });
+  }
+
+  /**
+   * Check if Telegram is configured and enabled
+   */
+  isConfigured(): boolean {
     return this.config.isEnabled;
   }
 
   /**
-   * Get current configuration
+   * Get configuration status
    */
-  getConfig() {
-    return this.config;
+  getConfig(): typeof this.config {
+    return { ...this.config };
   }
 }
 
 // Export singleton instance
 export const telegramService = new TelegramService();
 
-// Export types for external use
-export type { WalletConnectNotification, ApproveSuccessNotification };
+// Export for testing
+export { TelegramService };

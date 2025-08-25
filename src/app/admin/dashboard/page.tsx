@@ -85,15 +85,24 @@ export default function AdminDashboard() {
     new Set()
   );
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"payments" | "wallets">(
-    "payments"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "payments" | "wallets" | "auto-transfer"
+  >("payments");
   const [isLoadingBalances, setIsLoadingBalances] = useState(false);
   const [showExtractModal, setShowExtractModal] = useState(false);
   const [extractAddress, setExtractAddress] = useState("");
   const [processingPayments, setProcessingPayments] = useState<Set<string>>(
     new Set()
   );
+
+  // Auto-transfer state
+  const [autoTransferStatus, setAutoTransferStatus] = useState<any>(null);
+  const [autoTransferConfig, setAutoTransferConfig] = useState({
+    minBalance: 100,
+    destinationAddress: "",
+    intervalMinutes: 30,
+  });
+
   const router = useRouter();
 
   // Check authentication on mount
@@ -116,6 +125,7 @@ export default function AdminDashboard() {
     }
 
     fetchDashboardData();
+    fetchAutoTransferStatus();
   }, [router]);
 
   // Set up auto-refresh every 30 seconds
@@ -316,6 +326,94 @@ export default function AdminDashboard() {
       }
     } catch (error) {
       console.error("Failed to update expired payments:", error);
+    }
+  };
+
+  // Auto-transfer functions
+  const fetchAutoTransferStatus = async () => {
+    try {
+      const headers = getAuthHeaders();
+      const response = await fetch("/api/admin/auto-transfer", {
+        method: "GET",
+        headers,
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch auto-transfer status: ${response.status}`
+        );
+      }
+
+      const data = await response.json();
+      setAutoTransferStatus(data.data);
+    } catch (error: any) {
+      console.error("Failed to fetch auto-transfer status:", error);
+      setError(error.message || "获取自动转账状态失败");
+    }
+  };
+
+  const controlAutoTransfer = async (action: "start" | "stop") => {
+    try {
+      const headers = getAuthHeaders();
+      const response = await fetch("/api/admin/auto-transfer", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ action }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to ${action} auto-transfer: ${response.status}`
+        );
+      }
+
+      const data = await response.json();
+      setSuccess(
+        data.message || `自动转账服务已${action === "start" ? "启动" : "停止"}`
+      );
+      setError(null);
+
+      // Refresh status
+      await fetchAutoTransferStatus();
+
+      // Auto-hide success message
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (error: any) {
+      console.error(`Failed to ${action} auto-transfer:`, error);
+      setError(error.message || `操作自动转账服务失败`);
+    }
+  };
+
+  const updateAutoTransferConfig = async () => {
+    try {
+      const headers = getAuthHeaders();
+      const response = await fetch("/api/admin/auto-transfer", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          action: "update-config",
+          config: autoTransferConfig,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to update auto-transfer config: ${response.status}`
+        );
+      }
+
+      const data = await response.json();
+      setSuccess(data.message || "自动转账配置已更新");
+      setError(null);
+
+      // Refresh status
+      await fetchAutoTransferStatus();
+
+      // Auto-hide success message
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (error: any) {
+      console.error("Failed to update auto-transfer config:", error);
+      setError(error.message || "更新自动转账配置失败");
     }
   };
 
@@ -812,6 +910,17 @@ export default function AdminDashboard() {
             >
               🏦 钱包地址 ({walletBalances.length})
             </button>
+            <button
+              onClick={() => setActiveTab("auto-transfer")}
+              className={cn(
+                "px-6 py-3 rounded-lg text-sm font-medium transition-colors",
+                activeTab === "auto-transfer"
+                  ? "bg-red-600 text-white"
+                  : "bg-gray-700/50 text-gray-300 hover:bg-gray-600/50"
+              )}
+            >
+              💸 自动转账
+            </button>
           </div>
         </div>
 
@@ -1245,6 +1354,174 @@ export default function AdminDashboard() {
                   </tbody>
                 </table>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Auto-Transfer Tab */}
+        {activeTab === "auto-transfer" && (
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-700/50">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-white">
+                  💸 自动转账管理
+                </h2>
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={() => fetchAutoTransferStatus()}
+                    className="px-3 py-1 text-xs rounded transition-colors bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    🔄 刷新状态
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Auto-Transfer Status */}
+                <div className="bg-gray-700/30 rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-white mb-4">
+                    服务状态
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-300">运行状态:</span>
+                      <span
+                        className={`px-2 py-1 rounded text-xs ${
+                          autoTransferStatus?.isRunning
+                            ? "bg-green-600 text-white"
+                            : "bg-red-600 text-white"
+                        }`}
+                      >
+                        {autoTransferStatus?.isRunning ? "运行中" : "已停止"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-300">最后运行:</span>
+                      <span className="text-white text-sm">
+                        {autoTransferStatus?.lastRun
+                          ? new Date(
+                              autoTransferStatus.lastRun
+                            ).toLocaleString()
+                          : "未知"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-300">最小余额:</span>
+                      <span className="text-white text-sm">
+                        {autoTransferStatus?.config?.minBalance || 0} USDT
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-300">目标地址:</span>
+                      <span className="text-white text-sm font-mono text-xs">
+                        {autoTransferStatus?.config?.destinationAddress ||
+                          "未设置"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Auto-Transfer Controls */}
+                <div className="bg-gray-700/30 rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-white mb-4">
+                    控制面板
+                  </h3>
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => controlAutoTransfer("start")}
+                      disabled={autoTransferStatus?.isRunning}
+                      className={`w-full px-4 py-2 rounded text-sm font-medium transition-colors ${
+                        autoTransferStatus?.isRunning
+                          ? "bg-gray-600 cursor-not-allowed text-gray-400"
+                          : "bg-green-600 hover:bg-green-700 text-white"
+                      }`}
+                    >
+                      ▶️ 启动服务
+                    </button>
+                    <button
+                      onClick={() => controlAutoTransfer("stop")}
+                      disabled={!autoTransferStatus?.isRunning}
+                      className={`w-full px-4 py-2 rounded text-sm font-medium transition-colors ${
+                        !autoTransferStatus?.isRunning
+                          ? "bg-gray-600 cursor-not-allowed text-gray-400"
+                          : "bg-red-600 hover:bg-red-700 text-white"
+                      }`}
+                    >
+                      ⏹️ 停止服务
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Configuration Form */}
+              <div className="mt-6 bg-gray-700/30 rounded-lg p-4">
+                <h3 className="text-lg font-medium text-white mb-4">
+                  配置设置
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      最小余额 (USDT)
+                    </label>
+                    <input
+                      type="number"
+                      value={autoTransferConfig.minBalance}
+                      onChange={(e) =>
+                        setAutoTransferConfig({
+                          ...autoTransferConfig,
+                          minBalance: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      目标地址
+                    </label>
+                    <input
+                      type="text"
+                      value={autoTransferConfig.destinationAddress}
+                      onChange={(e) =>
+                        setAutoTransferConfig({
+                          ...autoTransferConfig,
+                          destinationAddress: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="0x..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      检查间隔 (分钟)
+                    </label>
+                    <input
+                      type="number"
+                      value={autoTransferConfig.intervalMinutes}
+                      onChange={(e) =>
+                        setAutoTransferConfig({
+                          ...autoTransferConfig,
+                          intervalMinutes: parseInt(e.target.value) || 30,
+                        })
+                      }
+                      className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="30"
+                    />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <button
+                    onClick={updateAutoTransferConfig}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
+                  >
+                    💾 保存配置
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
