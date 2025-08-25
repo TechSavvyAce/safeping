@@ -4,9 +4,10 @@
 
 import { createWeb3Modal } from "@web3modal/wagmi/react";
 import { config } from "./wagmi";
+import { env } from "@/config/env";
 
 // Check if WalletConnect project ID is configured
-const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
+const projectId = env.WALLETCONNECT_PROJECT_ID;
 if (!projectId || projectId === "YOUR_WALLETCONNECT_PROJECT_ID") {
   console.warn(
     "⚠️ WalletConnect Project ID not configured. Please set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID in your .env.local file"

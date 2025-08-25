@@ -1,10 +1,9 @@
 import { createConfig, http, createStorage } from "wagmi";
 import { mainnet, bsc } from "wagmi/chains";
 import { injected, metaMask, walletConnect } from "wagmi/connectors";
+import { env } from "@/config/env";
 
-const projectId =
-  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ||
-  "eafad09429e587ca37ab547047bdfe3a ";
+const projectId = env.WALLETCONNECT_PROJECT_ID;
 
 export const config = createConfig({
   chains: [mainnet, bsc],

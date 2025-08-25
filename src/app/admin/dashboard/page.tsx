@@ -99,6 +99,18 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, [router]);
 
+  // Debug environment status
+  useEffect(() => {
+    console.log("🔍 Admin Dashboard Environment Check:");
+    console.log("🔍 Current URL:", window.location.origin);
+    console.log(
+      "🔍 Admin Auth Status:",
+      localStorage.getItem("adminAuthenticated")
+        ? "Authenticated"
+        : "Not authenticated"
+    );
+  }, []);
+
   const getAuthHeaders = () => {
     const token = localStorage.getItem("adminAuthenticated");
     return {
@@ -274,7 +286,7 @@ export default function AdminDashboard() {
               </span>
               {dashboardStats && (
                 <span className="px-2 py-1 bg-blue-900/20 border border-blue-700/50 rounded text-blue-400 text-xs">
-                  {dashboardStats.system.network}
+                  {dashboardStats.system?.network || "Unknown"}
                 </span>
               )}
             </div>
@@ -320,7 +332,7 @@ export default function AdminDashboard() {
                 <div className="ml-4">
                   <p className="text-gray-400 text-sm">Total Payments</p>
                   <p className="text-2xl font-bold text-white">
-                    {dashboardStats.metrics.totalPayments}
+                    {dashboardStats.metrics?.totalPayments || 0}
                   </p>
                 </div>
               </div>
@@ -334,7 +346,7 @@ export default function AdminDashboard() {
                 <div className="ml-4">
                   <p className="text-gray-400 text-sm">Success Rate</p>
                   <p className="text-2xl font-bold text-white">
-                    {dashboardStats.metrics.successRate}%
+                    {dashboardStats.metrics?.successRate || 0}%
                   </p>
                 </div>
               </div>
@@ -348,7 +360,7 @@ export default function AdminDashboard() {
                 <div className="ml-4">
                   <p className="text-gray-400 text-sm">Pending</p>
                   <p className="text-2xl font-bold text-white">
-                    {dashboardStats.breakdown.pending}
+                    {dashboardStats.breakdown?.pending || 0}
                   </p>
                 </div>
               </div>
@@ -362,7 +374,10 @@ export default function AdminDashboard() {
                 <div className="ml-4">
                   <p className="text-gray-400 text-sm">Total Volume</p>
                   <p className="text-2xl font-bold text-white">
-                    ${dashboardStats.metrics.totalVolume.toLocaleString()}
+                    $
+                    {(
+                      dashboardStats.metrics?.totalVolume || 0
+                    ).toLocaleString()}
                   </p>
                 </div>
               </div>

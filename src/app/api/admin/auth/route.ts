@@ -3,16 +3,13 @@
 // =================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { validateEnvironment } from "@/lib/env-validation";
+import { env } from "@/config/env";
 
 export async function POST(request: NextRequest) {
   try {
     const { username, password } = await request.json();
 
-    // Get environment variables securely on server side
-    const env = validateEnvironment();
-
-    // Check credentials
+    // Check credentials using environment configuration
     if (username === env.ADMIN_USERNAME && password === env.ADMIN_PASSWORD) {
       return NextResponse.json({
         success: true,

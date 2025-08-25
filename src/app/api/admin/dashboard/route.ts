@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/database";
 import { blockchainService } from "@/lib/blockchain";
 import { rateLimit, createRateLimitResponse } from "@/lib/rate-limit";
+import { env, validateEnvironment } from "@/config/env";
 
 export async function GET(request: NextRequest) {
   try {
@@ -38,6 +39,22 @@ export async function GET(request: NextRequest) {
     // Get network information
     const networkInfo = blockchainService.getNetworkInfo();
 
+    // Validate environment configuration
+    validateEnvironment();
+
+    // Debug logging
+    console.log("🔍 Environment configuration:", {
+      NODE_ENV: env.NODE_ENV,
+      NETWORK_MODE: env.NETWORK_MODE,
+      DATABASE_URL: env.DATABASE_URL,
+      ADMIN_USERNAME: env.ADMIN_USERNAME ? "Set" : "Not set",
+      WALLETCONNECT_PROJECT_ID: env.WALLETCONNECT_PROJECT_ID
+        ? "Set"
+        : "Not set",
+    });
+
+    console.log("🔍 Network info:", networkInfo);
+
     // System health
     const systemHealth = {
       timestamp: new Date().toISOString(),
@@ -47,7 +64,7 @@ export async function GET(request: NextRequest) {
         blockchain: "operational",
         api: "operational",
       },
-      environment: process.env.NODE_ENV || "development",
+      environment: env.NODE_ENV,
       network: networkInfo.isMainnet ? "mainnet" : "testnet",
     };
 

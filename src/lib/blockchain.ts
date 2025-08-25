@@ -4,6 +4,7 @@
 
 import { ChainType } from "@/types";
 import { CHAIN_CONFIG } from "@/config/chains";
+import { env } from "@/config/env";
 
 // PaymentProcessor ABI (simplified for essential functions)
 const PAYMENT_PROCESSOR_ABI = [
@@ -477,7 +478,9 @@ export class BlockchainService {
     isMainnet: boolean;
     networks: Array<{ chain: ChainType; name: string; explorer: string }>;
   } {
-    const isMainnet = process.env.NEXT_PUBLIC_NETWORK_MODE === "mainnet";
+    // Use centralized environment configuration
+    const isMainnet = env.NETWORK_MODE === "mainnet";
+
     return {
       isMainnet,
       networks: [
