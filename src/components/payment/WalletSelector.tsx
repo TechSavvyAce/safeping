@@ -364,16 +364,6 @@ export function WalletSelector({
                   className="mx-auto"
                 />
               </div>
-              <div className="text-center">
-                <p className="text-gray-400 text-xs mb-2">
-                  或使用 TronLink 登录
-                </p>
-                <div className="bg-gray-800/50 rounded p-2 border border-gray-600/30">
-                  <p className="text-xs text-gray-300 font-mono break-all">
-                    {generateTronLinkLoginURI()}
-                  </p>
-                </div>
-              </div>
             </div>
           ) : (
             // WalletConnect QR code for imToken/Bitpie
@@ -384,16 +374,6 @@ export function WalletSelector({
                   size={120}
                   className="mx-auto"
                 />
-              </div>
-              <div className="text-center">
-                <p className="text-gray-400 text-xs mb-2">
-                  或使用 WalletConnect
-                </p>
-                <div className="bg-gray-800/50 rounded p-2 border border-gray-600/30">
-                  <p className="text-xs text-gray-300 font-mono break-all">
-                    {generateWalletConnectURI()}
-                  </p>
-                </div>
               </div>
             </div>
           )}
