@@ -16,17 +16,11 @@ export async function POST(request: NextRequest) {
         message: "Authentication successful",
       });
     } else {
-      return NextResponse.json(
-        { error: "Invalid credentials" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "用户名或密码错误" }, { status: 401 });
     }
   } catch (error: any) {
     console.error("Admin auth API error:", error);
-    return NextResponse.json(
-      { error: "Authentication failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "认证失败" }, { status: 500 });
   }
 }
 

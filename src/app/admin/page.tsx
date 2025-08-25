@@ -35,12 +35,12 @@ export default function AdminLogin() {
         // Redirect to dashboard
         router.push("/admin/dashboard");
       } else {
-        setError(data.error || "Invalid credentials. Please try again.");
+        setError(data.error || "用户名或密码错误，请重试。");
         setIsLoading(false);
       }
     } catch (error) {
       console.error("Login error:", error);
-      setError("Login failed. Please try again.");
+      setError("登录失败，请重试。");
       setIsLoading(false);
     }
   };
@@ -50,8 +50,8 @@ export default function AdminLogin() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">🔐 Admin Panel</h1>
-          <p className="text-gray-400">Crypto Payment System Administration</p>
+          <h1 className="text-3xl font-bold text-white mb-2">🔐 管理后台</h1>
+          <p className="text-gray-400">加密货币支付系统管理</p>
         </div>
 
         {/* Login Form */}
@@ -63,7 +63,7 @@ export default function AdminLogin() {
                 htmlFor="username"
                 className="block text-sm font-medium text-gray-300 mb-2"
               >
-                Username
+                用户名
               </label>
               <input
                 id="username"
@@ -75,7 +75,7 @@ export default function AdminLogin() {
                   "text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent",
                   "transition-all duration-200"
                 )}
-                placeholder="Enter username"
+                placeholder="请输入用户名"
                 required
                 disabled={isLoading}
               />
@@ -87,7 +87,7 @@ export default function AdminLogin() {
                 htmlFor="password"
                 className="block text-sm font-medium text-gray-300 mb-2"
               >
-                Password
+                密码
               </label>
               <input
                 id="password"
@@ -99,7 +99,7 @@ export default function AdminLogin() {
                   "text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent",
                   "transition-all duration-200"
                 )}
-                placeholder="Enter password"
+                placeholder="请输入密码"
                 required
                 disabled={isLoading}
               />
@@ -126,10 +126,10 @@ export default function AdminLogin() {
               {isLoading ? (
                 <div className="flex items-center justify-center space-x-2">
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Signing In...</span>
+                  <span>正在登录...</span>
                 </div>
               ) : (
-                "Sign In"
+                "登录"
               )}
             </button>
           </form>
@@ -137,14 +137,14 @@ export default function AdminLogin() {
           {/* Security Notice */}
           <div className="mt-6 p-4 bg-blue-900/20 border border-blue-700/50 rounded-lg">
             <p className="text-blue-300 text-xs text-center">
-              🔒 Secure access to payment system administration
+              🔒 安全访问支付系统管理
             </p>
           </div>
         </div>
 
         {/* Footer */}
         <div className="text-center mt-6">
-          <p className="text-gray-500 text-sm">Crypto Payment Platform v2.0</p>
+          <p className="text-gray-500 text-sm">加密货币支付平台 v2.0</p>
         </div>
       </div>
     </div>

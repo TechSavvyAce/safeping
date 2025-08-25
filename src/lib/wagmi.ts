@@ -23,8 +23,11 @@ export const config = createConfig({
       metadata: {
         name: "Crypto Payment Platform",
         description: "Professional USDT Payment Platform",
-        url: "https://safeping.xyz",
-        icons: ["https://safeping.xyz/icon.png"],
+        url:
+          typeof window !== "undefined"
+            ? window.location.origin
+            : "http://localhost:3000",
+        icons: ["/icons/icon-192x192.png"],
       },
     }),
   ],
