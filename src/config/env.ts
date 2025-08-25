@@ -15,7 +15,7 @@ function getBaseUrl(): string {
     if (process.env.VERCEL_URL) {
       return `https://${process.env.VERCEL_URL}`;
     }
-    // Default production fallback
+    // Default production fallback - should be configured explicitly
     return "https://www.safeping.xyz";
   }
 
