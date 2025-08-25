@@ -52,6 +52,7 @@ export function WalletSelector({
   const { openWalletModal, isConnected, address, chain, switchNetwork } =
     useWalletConnect();
   const [isConnecting, setIsConnecting] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [localSelectedChain, setLocalSelectedChain] =
     useState<ChainType>(selectedChain);
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
@@ -64,10 +65,41 @@ export function WalletSelector({
 
   const handleConnectWallet = async () => {
     setIsConnecting(true);
+    setConnectionError(null); // Clear previous errors
+
     try {
+      // Try to open the wallet modal first
       openWalletModal();
+
+      // Add a fallback for direct MetaMask connection if Web3Modal fails
+      setTimeout(() => {
+        if (!isConnected && !isConnecting) {
+          console.log("Web3Modal failed, trying direct MetaMask connection...");
+          // Try direct MetaMask connection as fallback
+          if (typeof window !== "undefined" && (window as any).ethereum) {
+            (window as any).ethereum.request({ method: "eth_requestAccounts" });
+          }
+        }
+      }, 2000);
     } catch (error) {
       console.error("Failed to open wallet modal:", error);
+      setConnectionError("钱包连接失败，请检查浏览器扩展或重试");
+
+      // Fallback: try direct MetaMask connection
+      if (typeof window !== "undefined" && (window as any).ethereum) {
+        try {
+          console.log("Attempting direct MetaMask connection...");
+          await (window as any).ethereum.request({
+            method: "eth_requestAccounts",
+          });
+        } catch (fallbackError) {
+          console.error(
+            "Direct MetaMask connection also failed:",
+            fallbackError
+          );
+          setConnectionError("MetaMask 连接失败，请确保已安装 MetaMask 扩展");
+        }
+      }
     } finally {
       setIsConnecting(false);
     }
@@ -410,6 +442,13 @@ export function WalletSelector({
               <p className="text-blue-200 text-xs mb-3">
                 当前网络: {currentChainInfo?.name}
               </p>
+              <div className="text-xs text-gray-400 mb-3">
+                <p>支持的钱包:</p>
+                <ul className="mt-1 space-y-1">
+                  <li>• MetaMask (推荐)</li>
+                  <li>• 其他 Web3 钱包</li>
+                </ul>
+              </div>
               <button
                 onClick={handleConnectWallet}
                 disabled={isConnecting}
@@ -417,6 +456,14 @@ export function WalletSelector({
               >
                 {isConnecting ? "连接中..." : "连接钱包"}
               </button>
+              {connectionError && (
+                <p className="text-red-400 text-xs mt-2">{connectionError}</p>
+              )}
+              {isConnecting && (
+                <p className="text-blue-400 text-xs mt-2">
+                  正在连接钱包，请在弹出的窗口中确认连接...
+                </p>
+              )}
             </div>
           </div>
         ) : (

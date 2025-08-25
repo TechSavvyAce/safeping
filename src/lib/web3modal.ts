@@ -29,6 +29,19 @@ export const web3modal = createWeb3Modal({
   allowUnsupportedChain: true,
   defaultChain: config.chains[0],
   enableAnalytics: false,
+  enableOnramp: false,
+  enableWalletFeatures: false,
+  enableExplorer: false,
+  explorerRecommendedWalletIds: [],
+  explorerExcludedWalletIds: [],
+  privacyPolicyUrl: undefined,
+  termsOfServiceUrl: undefined,
+  walletConnectVersion: 2,
+  // Disable external API calls that are causing 403 errors
+  enableNetworkView: false,
+  enableExplorer: false,
+  enableOnramp: false,
+  enableWalletFeatures: false,
 });
 
 // Export the modal instance for use in components

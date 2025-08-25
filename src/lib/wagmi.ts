@@ -12,7 +12,7 @@ export const config = createConfig({
     metaMask(),
     walletConnect({
       projectId,
-      showQrModal: true,
+      showQrModal: false, // Disable QR modal to prevent external API calls
       qrModalOptions: {
         themeMode: "dark",
         themeVariables: {
@@ -38,6 +38,10 @@ export const config = createConfig({
   storage: createStorage({
     storage: typeof window !== "undefined" ? window.localStorage : undefined,
   }),
+  // Add polling configuration for better connection stability
+  pollingInterval: 4000,
+  // Disable auto-connect to prevent connection issues
+  autoConnect: false,
 });
 
 export { mainnet, bsc };
