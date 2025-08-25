@@ -385,6 +385,70 @@ class Database {
     )) as WebhookLog[];
   }
 
+  // Admin operations
+  async getPaymentCount(): Promise<{ total: number }> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    const get = promisify(this.db.get.bind(this.db));
+
+    const result = (await get("SELECT COUNT(*) as total FROM payments")) as any;
+    return { total: result.total || 0 };
+  }
+
+  async getAllPayments(limit: number, offset: number): Promise<Payment[]> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    const all = (sql: string, params?: any[]) => {
+      return new Promise<any[]>((resolve, reject) => {
+        if (params) {
+          this.db!.all(sql, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+          });
+        } else {
+          this.db!.all(sql, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+          });
+        }
+      });
+    };
+
+    return (await all(
+      "SELECT * FROM payments ORDER BY created_at DESC LIMIT ? OFFSET ?",
+      [limit, offset]
+    )) as Payment[];
+  }
+
+  async getUniqueWalletAddresses(): Promise<
+    { address: string; chain: string }[]
+  > {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    const all = (sql: string, params?: any[]) => {
+      return new Promise<any[]>((resolve, reject) => {
+        if (params) {
+          this.db!.all(sql, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+          });
+        } else {
+          this.db!.all(sql, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+          });
+        }
+      });
+    };
+
+    return (await all(
+      "SELECT DISTINCT wallet_address as address, chain FROM payments WHERE wallet_address IS NOT NULL AND wallet_address != '' ORDER BY chain, address"
+    )) as { address: string; chain: string }[];
+  }
+
   // Analytics and reporting
   async getPaymentStats(days = 30): Promise<{
     total: number;
