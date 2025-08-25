@@ -790,13 +790,10 @@ export default function AdminDashboard() {
                         服务
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                        金额
+                        充值金额
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                         状态
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                        操作
                       </th>
                     </tr>
                   </thead>
@@ -851,7 +848,7 @@ export default function AdminDashboard() {
                             </div>
                           )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        {/* <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex space-x-2">
                             {payment.status === "pending" && (
                               <>
@@ -923,7 +920,7 @@ export default function AdminDashboard() {
                               </a>
                             )}
                           </div>
-                        </td>
+                        </td> */}
                       </tr>
                     ))}
                   </tbody>
@@ -1023,7 +1020,7 @@ export default function AdminDashboard() {
                                 className="p-1 text-gray-400 hover:text-blue-400 transition-colors"
                                 title="复制地址"
                               >
-                                📋
+                                {" "}
                               </button>
                               <a
                                 href={getChainExplorerAddress(
@@ -1035,7 +1032,7 @@ export default function AdminDashboard() {
                                 className="p-1 text-gray-400 hover:text-blue-400 transition-colors"
                                 title="查看地址"
                               >
-                                🔗
+                                {" "}
                               </a>
                             </div>
                           </div>
