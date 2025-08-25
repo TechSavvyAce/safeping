@@ -9,6 +9,7 @@ import { getDatabase } from "@/lib/database";
 import { CreatePaymentRequest } from "@/types";
 import { z } from "zod";
 import { rateLimit, createRateLimitResponse } from "@/lib/rate-limit";
+import { env } from "@/config/env";
 
 // Validation schema
 const createPaymentSchema = z.object({
@@ -61,9 +62,8 @@ export async function POST(request: NextRequest) {
       expires_at: expiresAt,
     });
 
-    // Generate payment URL (language will be loaded from database metadata)
-    const baseUrl =
-      process.env.NEXT_PUBLIC_BASE_URL || "https://www.safeping.xyz";
+    // Get base URL from environment configuration
+    const baseUrl = env.BASE_URL;
     const paymentUrl = `${baseUrl}/pay/${paymentId}`;
 
     // Generate QR code for mobile
@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       payment_id: paymentId,
       payment_url: paymentUrl,
+      base_url: baseUrl,
       qr_code: qrCode,
       expires_at: expiresAt.toISOString(),
       amount: data.amount,

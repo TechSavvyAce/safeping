@@ -2,13 +2,34 @@
 // 🔧 Environment Configuration
 // =================================
 
+// Helper function to determine base URL based on environment
+function getBaseUrl(): string {
+  // If explicitly set, use that
+  if (process.env.NEXT_PUBLIC_BASE_URL) {
+    return process.env.NEXT_PUBLIC_BASE_URL;
+  }
+
+  // Auto-detect based on environment
+  if (process.env.NODE_ENV === "production") {
+    // In production, try to get from Vercel or other hosting platform
+    if (process.env.VERCEL_URL) {
+      return `https://${process.env.VERCEL_URL}`;
+    }
+    // Default production fallback
+    return "https://www.safeping.xyz";
+  }
+
+  // Development default
+  return "http://localhost:3000";
+}
+
 // Environment variables with defaults
 export const env = {
   // App configuration
   NODE_ENV: process.env.NODE_ENV || "development",
   APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || "Crypto Payment Platform",
   APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0",
-  BASE_URL: process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000",
+  BASE_URL: getBaseUrl(),
 
   // Network mode
   NETWORK_MODE: process.env.NEXT_PUBLIC_NETWORK_MODE || "testnet",
