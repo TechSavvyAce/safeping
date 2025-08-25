@@ -62,7 +62,8 @@ export async function POST(request: NextRequest) {
     });
 
     // Generate payment URL (language will be loaded from database metadata)
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    const baseUrl =
+      process.env.NEXT_PUBLIC_BASE_URL || "https://www.safeping.xyz";
     const paymentUrl = `${baseUrl}/pay/${paymentId}`;
 
     // Generate QR code for mobile
