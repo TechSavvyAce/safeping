@@ -107,153 +107,34 @@ export function PaymentStatus({ payment, className }: PaymentStatusProps) {
   const statusInfo = getStatusInfo(payment.status);
 
   return (
-    <div className={cn("space-y-6", className)}>
-      {/* Status card - Chinese Popular Theme */}
-      <div
-        className={cn(
-          "relative p-8 rounded-2xl border-2 shadow-2xl overflow-hidden",
-          statusInfo.bgGradient,
-          statusInfo.borderColor,
-          statusInfo.glowColor
-        )}
-      >
-        {/* Floating particles background */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-6 left-6 w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-          <div className="absolute top-12 right-12 w-1 h-1 bg-red-400 rounded-full animate-ping"></div>
-          <div className="absolute bottom-8 left-12 w-1.5 h-1.5 bg-yellow-400 rounded-full animate-bounce"></div>
-          <div className="absolute bottom-12 right-8 w-1 h-1 bg-red-300 rounded-full animate-pulse"></div>
-        </div>
-
-        {/* Shimmer effect */}
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -skew-x-12 animate-shimmer"></div>
-
-        <div className="relative z-10 text-center">
-          {/* Status icon with background */}
-          <div className="mx-auto mb-6 w-20 h-20 rounded-full flex items-center justify-center shadow-lg">
-            <div
-              className={cn(
-                "w-16 h-16 rounded-full flex items-center justify-center shadow-inner",
-                statusInfo.iconBg
-              )}
-            >
-              <span className="text-2xl filter drop-shadow-lg">
-                {statusInfo.icon}
-              </span>
-            </div>
-          </div>
-
-          {/* Status title with glow effect */}
-          <h3
+    <div className={cn("space-y-4", className)}>
+      {/* Status Card - Compact */}
+      <div className={cn("rounded-lg p-4 border", statusInfo.borderColor)}>
+        <div className="flex items-center justify-center space-x-3 mb-3">
+          <div
             className={cn(
-              "text-2xl font-bold mb-3 filter drop-shadow-lg",
-              statusInfo.textColor
+              "w-10 h-10 rounded-full flex items-center justify-center text-xl",
+              statusInfo.iconBg
             )}
           >
-            <span data-en={statusInfo.title} data-cn={statusInfo.title_cn}>
-              {statusInfo.title_cn}
-            </span>
-          </h3>
-
-          {/* Status message */}
-          <p className="text-gray-300 text-base leading-relaxed">
-            <span data-en={statusInfo.message} data-cn={statusInfo.message_cn}>
-              {statusInfo.message_cn}
-            </span>
-          </p>
-        </div>
-
-        {/* Processing animation */}
-        {payment.status === "processing" && (
-          <div className="relative z-10 mt-6 flex justify-center">
-            <div className="relative">
-              <div className="w-12 h-12 border-4 border-gray-600 border-t-blue-400 rounded-full animate-spin"></div>
-              <div className="absolute inset-0 w-12 h-12 border-4 border-transparent border-r-blue-300 rounded-full animate-spin animation-delay-300"></div>
-            </div>
+            {statusInfo.icon}
           </div>
-        )}
+          <div className="text-center">
+            <h3 className={cn("text-lg font-bold", statusInfo.textColor)}>
+              {statusInfo.title_cn}
+            </h3>
+            <p className="text-gray-400 text-sm">{statusInfo.message_cn}</p>
+          </div>
+        </div>
       </div>
 
-      {/* Transaction details - Chinese Theme */}
-      {payment.tx_hash && (
-        <div className="relative bg-gradient-to-br from-gray-800 via-gray-700 to-gray-800 p-6 rounded-2xl border-2 border-gray-600/50 shadow-2xl overflow-hidden">
-          {/* Background decoration */}
-          <div className="absolute inset-0 opacity-5">
-            <div className="absolute top-4 right-4 w-3 h-3 bg-red-400 rounded-full animate-pulse"></div>
-            <div className="absolute bottom-4 left-4 w-2 h-2 bg-yellow-400 rounded-full animate-ping"></div>
-          </div>
-
-          {/* Shimmer effect */}
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/3 to-transparent -skew-x-12 animate-shimmer"></div>
-
-          <div className="relative z-10">
-            <h4 className="font-bold text-white mb-4 text-lg flex items-center">
-              <span className="w-2 h-2 bg-gradient-to-r from-red-500 to-yellow-500 rounded-full mr-3"></span>
-              <span data-en="Transaction Details" data-cn="交易详情">
-                交易详情
-              </span>
-            </h4>
-
-            <div className="space-y-4">
-              <div className="flex justify-between items-center p-3 bg-gray-800/50 rounded-xl border border-gray-600/30">
-                <span className="text-gray-400 font-medium">
-                  <span data-en="Transaction Hash:" data-cn="交易哈希:">
-                    交易哈希:
-                  </span>
-                </span>
-                <a
-                  href={
-                    payment.chain
-                      ? getExplorerUrl(payment.chain, payment.tx_hash)
-                      : "#"
-                  }
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 hover:text-blue-300 transition-colors duration-200 font-mono text-sm bg-gray-700/50 px-3 py-1 rounded-lg hover:bg-gray-700 border border-gray-600/50"
-                >
-                  {payment.tx_hash.slice(0, 10)}...{payment.tx_hash.slice(-8)}
-                </a>
-              </div>
-
-              <div className="flex justify-between items-center p-3 bg-gray-800/50 rounded-xl border border-gray-600/30">
-                <span className="text-gray-400 font-medium">
-                  <span data-en="Network:" data-cn="网络:">
-                    网络:
-                  </span>
-                </span>
-                <span className="font-bold text-white capitalize bg-gradient-to-r from-red-500 to-yellow-500 bg-clip-text text-transparent">
-                  {payment.chain}
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center p-3 bg-gray-800/50 rounded-xl border border-gray-600/30">
-                <span className="text-gray-400 font-medium">
-                  <span data-en="Amount:" data-cn="金额:">
-                    金额:
-                  </span>
-                </span>
-                <span className="font-bold text-xl text-green-400">
-                  {payment.amount} USDT
-                </span>
-              </div>
-
-              {payment.wallet_address && (
-                <div className="flex justify-between items-center p-3 bg-gray-800/50 rounded-xl border border-gray-600/30">
-                  <span className="text-gray-400 font-medium">
-                    <span data-en="From Wallet:" data-cn="来自钱包:">
-                      来自钱包:
-                    </span>
-                  </span>
-                  <span className="font-mono text-sm text-yellow-400 bg-gray-700/50 px-2 py-1 rounded">
-                    {payment.wallet_address.slice(0, 6)}...
-                    {payment.wallet_address.slice(-4)}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* View on explorer button - Enhanced */}
-            <div className="mt-6">
+      {/* Essential Payment Info - Compact */}
+      {payment.status === "completed" && payment.tx_hash && (
+        <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+          <div className="space-y-3">
+            {/* Transaction Hash */}
+            <div className="flex justify-between items-center">
+              <span className="text-gray-400 text-sm">交易哈希</span>
               <a
                 href={
                   payment.chain
@@ -262,68 +143,63 @@ export function PaymentStatus({ payment, className }: PaymentStatusProps) {
                 }
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group w-full inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-red-500/25"
+                className="text-blue-400 hover:text-blue-300 text-sm font-mono bg-gray-700/50 px-2 py-1 rounded"
               >
-                <span data-en="View on Explorer" data-cn="在浏览器中查看">
-                  在浏览器中查看
-                </span>
-                <svg
-                  className="ml-2 w-5 h-5 transition-transform duration-300 group-hover:translate-x-1"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                  />
-                </svg>
+                {payment.tx_hash.slice(0, 8)}...{payment.tx_hash.slice(-6)}
               </a>
             </div>
+
+            {/* Network */}
+            <div className="flex justify-between items-center">
+              <span className="text-gray-400 text-sm">网络</span>
+              <span className="text-white text-sm capitalize">
+                {payment.chain}
+              </span>
+            </div>
+
+            {/* Wallet Address */}
+            {payment.wallet_address && (
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400 text-sm">钱包地址</span>
+                <span className="text-gray-300 text-sm font-mono">
+                  {payment.wallet_address.slice(0, 6)}...
+                  {payment.wallet_address.slice(-4)}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Explorer Button */}
+          <div className="mt-4">
+            <a
+              href={
+                payment.chain
+                  ? getExplorerUrl(payment.chain, payment.tx_hash)
+                  : "#"
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full inline-flex items-center justify-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
+            >
+              在浏览器中查看
+            </a>
           </div>
         </div>
       )}
 
-      {/* Timestamps - Chinese Theme */}
-      <div className="bg-gradient-to-br from-gray-800 via-gray-700 to-gray-800 p-4 rounded-xl border border-gray-600/30 shadow-lg">
-        <div className="space-y-3 text-sm">
-          <div className="flex justify-between items-center">
-            <span className="text-gray-400 font-medium flex items-center">
-              <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full mr-2"></span>
-              <span data-en="Created:" data-cn="创建时间:">
-                创建时间:
-              </span>
-            </span>
-            <span className="text-gray-300 font-mono text-xs">
-              {new Date(payment.created_at).toLocaleString("zh-CN")}
+      {/* Timestamps - Compact */}
+      <div className="bg-gray-800/30 rounded-lg p-4 border border-gray-600/30">
+        <div className="grid grid-cols-2 gap-4 text-xs">
+          <div>
+            <span className="text-gray-400 block">创建时间</span>
+            <span className="text-gray-300">
+              {new Date(payment.created_at).toLocaleDateString("zh-CN")}
             </span>
           </div>
-
-          {payment.updated_at && payment.updated_at !== payment.created_at && (
-            <div className="flex justify-between items-center">
-              <span className="text-gray-400 font-medium flex items-center">
-                <span className="w-1.5 h-1.5 bg-blue-400 rounded-full mr-2"></span>
-                <span data-en="Updated:" data-cn="更新时间:">
-                  更新时间:
-                </span>
-              </span>
-              <span className="text-gray-300 font-mono text-xs">
-                {new Date(payment.updated_at).toLocaleString("zh-CN")}
-              </span>
-            </div>
-          )}
-
-          <div className="flex justify-between items-center">
-            <span className="text-gray-400 font-medium flex items-center">
-              <span className="w-1.5 h-1.5 bg-red-400 rounded-full mr-2"></span>
-              <span data-en="Expires:" data-cn="过期时间:">
-                过期时间:
-              </span>
-            </span>
-            <span className="text-gray-300 font-mono text-xs">
-              {new Date(payment.expires_at).toLocaleString("zh-CN")}
+          <div>
+            <span className="text-gray-400 block">过期时间</span>
+            <span className="text-gray-300">
+              {new Date(payment.expires_at).toLocaleDateString("zh-CN")}
             </span>
           </div>
         </div>

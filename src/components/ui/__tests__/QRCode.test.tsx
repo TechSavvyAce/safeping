@@ -93,12 +93,10 @@ describe("PaymentQR Component", () => {
     });
   });
 
-  it("renders payment QR with correct URL", async () => {
+  it("renders payment QR code with payment ID", () => {
     render(
       <PaymentQR
         paymentId={mockPaymentId}
-        amount={mockAmount}
-        description={mockDescription}
       />
     );
 
@@ -113,7 +111,7 @@ describe("PaymentQR Component", () => {
     });
   });
 
-  it("renders without amount and description", async () => {
+  it("renders payment QR code without optional props", () => {
     render(<PaymentQR paymentId={mockPaymentId} />);
 
     expect(screen.getByText("📱 Mobile Payment")).toBeInTheDocument();

@@ -7,6 +7,7 @@ import { Inter, Noto_Sans_SC } from "next/font/google";
 import "./globals.css";
 import { I18nProvider } from "@/components/providers/I18nProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { WalletProvider } from "@/components/providers/WalletProvider";
 
 const inter = Inter({ subsets: ["latin"] });
 const notoSansSC = Noto_Sans_SC({
@@ -123,10 +124,12 @@ export default function RootLayout({
       >
         <ThemeProvider defaultTheme="dark">
           <I18nProvider>
-            {/* Global wrapper with dark mode support */}
-            <div className="min-h-full bg-white dark:bg-gray-900 transition-colors duration-200">
-              {children}
-            </div>
+            <WalletProvider>
+              {/* Global wrapper with dark mode support */}
+              <div className="min-h-full bg-white dark:bg-gray-900 transition-colors duration-200">
+                {children}
+              </div>
+            </WalletProvider>
           </I18nProvider>
         </ThemeProvider>
       </body>

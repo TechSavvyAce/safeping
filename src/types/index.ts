@@ -3,10 +3,10 @@
 // =================================
 
 // Blockchain Networks
-export type ChainType = "bsc" | "ethereum" | "tron";
+export type ChainType = "ethereum" | "bsc" | "tron";
 
 // Wallet Types
-export type WalletType = "metamask" | "tronlink" | "imtoken";
+export type WalletType = "metamask" | "tronlink" | "imtoken" | "bitpie";
 
 // Payment Status
 export type PaymentStatus =
@@ -21,13 +21,16 @@ export interface Payment {
   id: string;
   payment_id: string;
   service_name: string;
+  service_name_cn?: string;
   description?: string;
+  description_cn?: string;
   amount: number;
   chain?: ChainType;
   status: PaymentStatus;
   wallet_address?: string;
   tx_hash?: string;
   webhook_url?: string;
+  metadata?: string;
   language: string;
   created_at: string;
   updated_at: string;

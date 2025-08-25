@@ -6,7 +6,7 @@ import "@testing-library/jest-dom";
 import "vitest-canvas-mock";
 
 // Mock Next.js router
-import { vi } from "vitest";
+import { vi, beforeAll, afterAll } from "vitest";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({

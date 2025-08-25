@@ -2,7 +2,15 @@
 // 📱 Telegram Bot Notification Service
 // =================================
 
-import { getTelegramConfig } from "./env-validation";
+// Load environment variables from .env files
+try {
+  require("dotenv").config();
+} catch (error) {
+  // dotenv not available, continue without it
+  console.log(
+    "📝 Note: dotenv not available, using system environment variables"
+  );
+}
 
 interface TelegramMessage {
   text: string;
@@ -27,7 +35,33 @@ interface ApproveSuccessNotification {
 }
 
 class TelegramService {
-  private config = getTelegramConfig();
+  private config: {
+    token: string | undefined;
+    channelId: string | undefined;
+    isEnabled: boolean;
+  };
+
+  constructor() {
+    // Get Telegram config directly from process.env without full validation
+    this.config = {
+      token: process.env.TELEGRAM_TOKEN,
+      channelId: process.env.TELEGRAM_CHANNEL_ID,
+      isEnabled: !!(
+        process.env.TELEGRAM_TOKEN && process.env.TELEGRAM_CHANNEL_ID
+      ),
+    };
+
+    // Debug logging
+    console.log("🔍 Telegram config loaded:", {
+      hasToken: !!this.config.token,
+      hasChannelId: !!this.config.channelId,
+      isEnabled: this.config.isEnabled,
+      tokenPreview: this.config.token
+        ? `${this.config.token.substring(0, 10)}...`
+        : "Not set",
+      channelId: this.config.channelId || "Not set",
+    });
+  }
 
   /**
    * Send a message to the configured Telegram channel
