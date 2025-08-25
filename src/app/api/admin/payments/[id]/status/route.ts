@@ -8,7 +8,7 @@ import { rateLimit, createRateLimitResponse } from "@/lib/rate-limit";
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Apply rate limiting
@@ -30,7 +30,7 @@ export async function PUT(
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
     const { status } = await request.json();
 
     // Validate status

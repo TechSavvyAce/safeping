@@ -66,13 +66,17 @@ export default function AdminDashboard() {
     null
   );
   const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedChain, setSelectedChain] = useState<string>("all");
-  const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [lastDataRefresh, setLastDataRefresh] = useState<Date>(new Date());
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedChain, setSelectedChain] = useState("all");
+  const [selectedStatus, setSelectedStatus] = useState("all");
+  const [updatingPayments, setUpdatingPayments] = useState<Set<string>>(
+    new Set()
+  );
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const router = useRouter();
 
   // Check authentication on mount
@@ -95,8 +99,10 @@ export default function AdminDashboard() {
     }
 
     fetchDashboardData();
+  }, [router]);
 
-    // Set up auto-refresh every 30 seconds
+  // Set up auto-refresh every 30 seconds
+  useEffect(() => {
     const interval = setInterval(fetchDashboardData, 30000);
 
     // Set up time update every second
@@ -108,7 +114,35 @@ export default function AdminDashboard() {
       clearInterval(interval);
       clearInterval(timeInterval);
     };
-  }, [router]);
+  }, []);
+
+  // Add a more frequent refresh for critical data
+  useEffect(() => {
+    const criticalRefreshInterval = setInterval(() => {
+      // Only refresh if not currently loading
+      if (!isLoading) {
+        fetchDashboardData();
+      }
+    }, 10000); // Refresh every 10 seconds for critical updates
+
+    return () => clearInterval(criticalRefreshInterval);
+  }, [isLoading]);
+
+  // Check for expired payments every minute
+  useEffect(() => {
+    const expiredCheckInterval = setInterval(() => {
+      updateExpiredPayments();
+    }, 60000); // Check every minute
+
+    return () => clearInterval(expiredCheckInterval);
+  }, [payments]);
+
+  // Check for expired payments on initial load
+  useEffect(() => {
+    if (payments.length > 0) {
+      updateExpiredPayments();
+    }
+  }, [payments]);
 
   // Debug environment status
   useEffect(() => {
@@ -177,9 +211,11 @@ export default function AdminDashboard() {
 
       setLastRefresh(new Date());
       setLastDataRefresh(new Date());
+      setIsInitialLoading(false);
     } catch (error: any) {
       console.error("Failed to fetch dashboard data:", error);
       setError(error.message || "获取仪表板数据失败");
+      setIsInitialLoading(false);
     } finally {
       setIsLoading(false);
     }
@@ -194,6 +230,14 @@ export default function AdminDashboard() {
   const confirmPaymentStatus = async (paymentId: string, newStatus: string) => {
     try {
       const headers = getAuthHeaders();
+      const isUpdating = updatingPayments.has(paymentId);
+
+      if (isUpdating) {
+        console.log(`Payment ${paymentId} is already updating.`);
+        return;
+      }
+
+      setUpdatingPayments((prev) => new Set([...prev, paymentId]));
 
       const response = await fetch(`/api/admin/payments/${paymentId}/status`, {
         method: "PUT",
@@ -217,10 +261,68 @@ export default function AdminDashboard() {
     } catch (error: any) {
       console.error("Failed to update payment status:", error);
       setError(error.message || "更新支付状态失败");
+    } finally {
+      setUpdatingPayments((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(paymentId);
+        return newSet;
+      });
+    }
+  };
+
+  // Function to automatically update expired payments
+  const updateExpiredPayments = async () => {
+    try {
+      const now = new Date();
+      const expiredPayments = payments.filter((payment) => {
+        const expiresAt = new Date(payment.expires_at);
+        return payment.status === "pending" && now > expiresAt;
+      });
+
+      if (expiredPayments.length > 0) {
+        console.log(
+          `Found ${expiredPayments.length} expired payments, updating...`
+        );
+
+        // Update each expired payment
+        for (const payment of expiredPayments) {
+          try {
+            const headers = getAuthHeaders();
+            await fetch(`/api/admin/payments/${payment.payment_id}/status`, {
+              method: "PUT",
+              headers,
+              body: JSON.stringify({ status: "expired" }),
+            });
+          } catch (error) {
+            console.error(
+              `Failed to update expired payment ${payment.payment_id}:`,
+              error
+            );
+          }
+        }
+
+        // Refresh data after updating expired payments
+        await fetchDashboardData();
+        setSuccess(`已自动更新 ${expiredPayments.length} 个过期支付状态`);
+        setTimeout(() => setSuccess(null), 3000);
+      }
+    } catch (error) {
+      console.error("Failed to update expired payments:", error);
     }
   };
 
   const filteredPayments = payments.filter((payment) => {
+    // Check if payment is expired and update status if needed
+    const now = new Date();
+    const expiresAt = new Date(payment.expires_at);
+    const isExpired = now > expiresAt;
+
+    // If payment is pending and expired, update the local state to show as expired
+    if (payment.status === "pending" && isExpired) {
+      // Update the local payment status to expired for display purposes
+      payment.status = "expired";
+    }
+
     const matchesSearch =
       payment.payment_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       payment.wallet_address
@@ -276,7 +378,7 @@ export default function AdminDashboard() {
     }
   };
 
-  if (isLoading && !dashboardStats) {
+  if (isInitialLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
         <div className="text-center">
@@ -298,30 +400,62 @@ export default function AdminDashboard() {
               <span className="px-2 py-1 bg-green-900/20 border border-green-700/50 rounded text-green-400 text-xs">
                 已认证
               </span>
-              {dashboardStats && (
-                <span className="px-2 py-1 bg-blue-900/20 border border-blue-700/50 rounded text-blue-400 text-xs">
-                  {dashboardStats.system?.network === "mainnet"
-                    ? "主网"
-                    : "测试网"}
-                </span>
+              {isLoading && (
+                <div className="flex items-center space-x-2 px-2 py-1 bg-blue-900/20 border border-blue-700/50 rounded text-blue-400 text-xs">
+                  <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                  <span>刷新中</span>
+                </div>
               )}
-              <span className="px-2 py-1 bg-green-900/20 border border-green-700/50 rounded text-green-400 text-xs">
-                🟢 系统正常
-              </span>
+              <div className="flex items-center space-x-2 px-2 py-1 bg-yellow-900/20 border border-yellow-700/50 rounded text-yellow-400 text-xs">
+                <span>⏰ 自动刷新: 10秒</span>
+              </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="text-sm text-gray-400">
-                当前时间: {lastRefresh.toLocaleTimeString()}
-              </div>
-              <div className="text-sm text-gray-400">
-                当前日期: {lastRefresh.toLocaleDateString()}
-              </div>
-              <div className="text-sm text-gray-400">
-                数据更新: {lastDataRefresh.toLocaleTimeString()}
+              <div className="text-right">
+                <div className="text-xs text-gray-400">最后更新</div>
+                <div className="text-sm text-white">
+                  {lastRefresh.toLocaleTimeString()}
+                </div>
               </div>
               <button
+                onClick={fetchDashboardData}
+                disabled={isLoading}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                  isLoading
+                    ? "bg-gray-600 cursor-not-allowed text-gray-400"
+                    : "bg-red-600 hover:bg-red-700 text-white"
+                )}
+              >
+                {isLoading ? (
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>刷新中</span>
+                  </div>
+                ) : (
+                  "🔄 刷新数据"
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  // Force immediate refresh
+                  fetchDashboardData();
+                  setSuccess("数据已强制刷新");
+                  setTimeout(() => setSuccess(null), 2000);
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                ⚡ 强制刷新
+              </button>
+              <button
+                onClick={updateExpiredPayments}
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                ⏰ 检查过期支付
+              </button>
+              <button
                 onClick={handleLogout}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors"
               >
                 退出登录
               </button>
@@ -330,606 +464,29 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      {/* Error Banner */}
-      {error && (
-        <div className="bg-red-900/20 border border-red-700/50 p-4">
-          <div className="max-w-7xl mx-auto flex justify-between items-center">
-            <p className="text-red-400">{error}</p>
-            <button
-              onClick={() => setError(null)}
-              className="text-red-400 hover:text-red-300"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Success Banner */}
-      {success && (
-        <div className="bg-green-900/20 border border-green-700/50 p-4">
-          <div className="max-w-7xl mx-auto flex justify-between items-center">
-            <p className="text-green-400">{success}</p>
-            <button
-              onClick={() => setSuccess(null)}
-              className="text-green-400 hover:text-green-300"
-            >
-              ✕
-            </button>
-          </div>
+      {/* Status Messages */}
+      {(error || success) && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          {error && (
+            <div className="bg-red-900/20 border border-red-700/50 rounded-lg p-4 mb-4">
+              <div className="flex items-center space-x-2">
+                <span className="text-red-400">❌</span>
+                <span className="text-red-200">{error}</span>
+              </div>
+            </div>
+          )}
+          {success && (
+            <div className="bg-green-900/20 border border-green-700/50 rounded-lg p-4 mb-4">
+              <div className="flex items-center space-x-2">
+                <span className="text-green-400">✅</span>
+                <span className="text-green-200">{success}</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Clock Display */}
-        <div className="bg-gradient-to-r from-blue-900/20 to-purple-900/20 backdrop-blur-sm rounded-xl border border-blue-700/50 p-6 mb-6">
-          <div className="text-center">
-            <div className="text-4xl font-bold text-white mb-2">
-              {lastRefresh.toLocaleTimeString()}
-            </div>
-            <div className="text-lg text-blue-300">
-              {lastRefresh.toLocaleDateString()}
-            </div>
-          </div>
-        </div>
-
-        {/* Warranty Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">保修状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">硬件保修</div>
-              <div className="text-lg font-bold text-green-400">🟢 有效</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">软件保修</div>
-              <div className="text-lg font-bold text-green-400">🟢 有效</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">服务保修</div>
-              <div className="text-lg font-bold text-green-400">🟢 有效</div>
-            </div>
-          </div>
-        </div>
-
-        {/* License Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">许可证状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">
-                软件许可证
-              </div>
-              <div className="text-lg font-bold text-green-400">🟢 有效</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">
-                API 许可证
-              </div>
-              <div className="text-lg font-bold text-green-400">🟢 有效</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">
-                服务许可证
-              </div>
-              <div className="text-lg font-bold text-green-400">🟢 有效</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Audit Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">审计状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">系统审计</div>
-              <div className="text-lg font-bold text-green-400">🟢 通过</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">安全审计</div>
-              <div className="text-lg font-bold text-green-400">🟢 通过</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">合规审计</div>
-              <div className="text-lg font-bold text-green-400">🟢 通过</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Compliance Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">合规状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">数据保护</div>
-              <div className="text-lg font-bold text-green-400">🟢 合规</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">隐私保护</div>
-              <div className="text-lg font-bold text-green-400">🟢 合规</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">安全标准</div>
-              <div className="text-lg font-bold text-green-400">🟢 合规</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Support Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">支持状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">技术支持</div>
-              <div className="text-lg font-bold text-green-400">🟢 可用</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">文档支持</div>
-              <div className="text-lg font-bold text-green-400">🟢 可用</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">社区支持</div>
-              <div className="text-lg font-bold text-green-400">🟢 可用</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Uptime Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">
-            运行时间状态
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">
-                系统运行时间
-              </div>
-              <div className="text-lg font-bold text-green-400">🟢 24/7</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">
-                数据库运行时间
-              </div>
-              <div className="text-lg font-bold text-green-400">🟢 24/7</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">
-                API 运行时间
-              </div>
-              <div className="text-lg font-bold text-green-400">🟢 24/7</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Version Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">版本状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">应用版本</div>
-              <div className="text-lg font-bold text-blue-400">v2.0.0</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">
-                数据库版本
-              </div>
-              <div className="text-lg font-bold text-green-400">v1.0.0</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">API 版本</div>
-              <div className="text-lg font-bold text-purple-400">v1.0.0</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Integration Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">集成状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">
-                WalletConnect
-              </div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">Web3Modal</div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">
-                Telegram Bot
-              </div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">Webhook</div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Notification Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">通知状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">邮件通知</div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">短信通知</div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">推送通知</div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Log Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">日志状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">错误日志</div>
-              <div className="text-lg font-bold text-red-400">🔴 0 条</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">警告日志</div>
-              <div className="text-lg font-bold text-yellow-400">🟡 0 条</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">信息日志</div>
-              <div className="text-lg font-bold text-blue-400">🔵 0 条</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">调试日志</div>
-              <div className="text-lg font-bold text-gray-400">⚪ 0 条</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Alert Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">告警状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">严重告警</div>
-              <div className="text-lg font-bold text-red-400">🔴 0 个</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">警告</div>
-              <div className="text-lg font-bold text-yellow-400">🟡 0 个</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">信息</div>
-              <div className="text-lg font-bold text-blue-400">🔵 0 个</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">调试</div>
-              <div className="text-lg font-bold text-gray-400">⚪ 0 个</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Monitoring Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">监控状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">系统监控</div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">性能监控</div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">错误监控</div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">安全监控</div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Backup Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">备份状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">
-                数据库备份
-              </div>
-              <div className="text-lg font-bold text-green-400">🟢 已备份</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">
-                配置文件备份
-              </div>
-              <div className="text-lg font-bold text-green-400">🟢 已备份</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">日志备份</div>
-              <div className="text-lg font-bold text-green-400">🟢 已备份</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Maintenance Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">维护状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">系统维护</div>
-              <div className="text-lg font-bold text-green-400">
-                🟢 无需维护
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">
-                数据库维护
-              </div>
-              <div className="text-lg font-bold text-green-400">
-                🟢 无需维护
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">API 维护</div>
-              <div className="text-lg font-bold text-green-400">
-                🟢 无需维护
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Security Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">安全状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">认证状态</div>
-              <div className="text-lg font-bold text-green-400">🟢 已认证</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">会话安全</div>
-              <div className="text-lg font-bold text-green-400">🟢 安全</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">API 安全</div>
-              <div className="text-lg font-bold text-green-400">🟢 安全</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">数据加密</div>
-              <div className="text-lg font-bold text-green-400">🟢 已加密</div>
-            </div>
-          </div>
-        </div>
-
-        {/* System Performance */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">系统性能</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">响应时间</div>
-              <div className="text-lg font-bold text-green-400">🟢 快速</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">内存使用</div>
-              <div className="text-lg font-bold text-blue-400">🟢 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">CPU 使用</div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">网络延迟</div>
-              <div className="text-lg font-bold text-green-400">🟢 低延迟</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Wallet Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">钱包状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">活跃钱包</div>
-              <div className="text-lg font-bold text-blue-400">
-                {walletBalances.length} 个
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">总交易额</div>
-              <div className="text-lg font-bold text-green-400">
-                $
-                {walletBalances
-                  .reduce((sum, w) => sum + w.totalVolume, 0)
-                  .toLocaleString()}
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">
-                总支付次数
-              </div>
-              <div className="text-lg font-bold text-purple-400">
-                {walletBalances.reduce((sum, w) => sum + w.paymentCount, 0)}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Payment Processing Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">
-            支付处理状态
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">处理中</div>
-              <div className="text-lg font-bold text-yellow-400">
-                {payments.filter((p) => p.status === "pending").length} 笔
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">已完成</div>
-              <div className="text-lg font-bold text-green-400">
-                {payments.filter((p) => p.status === "completed").length} 笔
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">失败</div>
-              <div className="text-lg font-bold text-red-400">
-                {payments.filter((p) => p.status === "failed").length} 笔
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">过期</div>
-              <div className="text-lg font-bold text-gray-400">
-                {payments.filter((p) => p.status === "expired").length} 笔
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Blockchain Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">区块链状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">以太坊</div>
-              <div className="text-lg font-bold text-blue-400">🔵 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">
-                币安智能链
-              </div>
-              <div className="text-lg font-bold text-yellow-400">🟡 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">波场</div>
-              <div className="text-lg font-bold text-red-400">🔴 正常</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Database Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">数据库状态</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">连接状态</div>
-              <div className="text-lg font-bold text-green-400">🟢 已连接</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">支付记录</div>
-              <div className="text-lg font-bold text-blue-400">
-                {payments.length} 条
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">钱包记录</div>
-              <div className="text-lg font-bold text-purple-400">
-                {walletBalances.length} 个
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* API Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">
-            API 服务状态
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">
-                仪表板 API
-              </div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">支付 API</div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">钱包 API</div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">认证 API</div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Session Info */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">会话信息</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">登录状态</div>
-              <div className="text-lg font-bold text-green-400">🟢 已登录</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">会话时长</div>
-              <div className="text-lg font-bold text-blue-400">
-                {Math.floor(
-                  (Date.now() -
-                    parseInt(localStorage.getItem("adminLoginTime") || "0")) /
-                    (1000 * 60)
-                )}{" "}
-                分钟
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">最后活动</div>
-              <div className="text-lg font-bold text-yellow-400">
-                {lastRefresh.toLocaleTimeString()}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Environment Info */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">
-            系统环境信息
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">环境</div>
-              <div className="text-lg font-bold text-blue-400">
-                {process.env.NODE_ENV === "production"
-                  ? "生产环境"
-                  : "开发环境"}
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">网络模式</div>
-              <div className="text-lg font-bold text-green-400">
-                {dashboardStats?.system?.network === "mainnet"
-                  ? "主网"
-                  : "测试网"}
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">系统状态</div>
-              <div className="text-lg font-bold text-green-400">🟢 正常</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm font-medium text-gray-400">数据库</div>
-              <div className="text-lg font-bold text-green-400">
-                🟢 连接正常
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Stats Overview */}
         {dashboardStats && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
@@ -994,8 +551,8 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Filters */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-8">
+        {/* Search and Filters */}
+        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -1003,37 +560,35 @@ export default function AdminDashboard() {
               </label>
               <input
                 type="text"
-                placeholder="支付ID、钱包地址或服务名称"
+                placeholder="搜索支付ID、钱包地址或服务名称..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                区块链
+                区块链网络
               </label>
               <select
                 value={selectedChain}
                 onChange={(e) => setSelectedChain(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
               >
-                <option value="all">所有链</option>
+                <option value="all">所有网络</option>
                 <option value="ethereum">以太坊</option>
                 <option value="bsc">币安智能链</option>
                 <option value="tron">波场</option>
               </select>
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                状态
+                支付状态
               </label>
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
               >
                 <option value="all">所有状态</option>
                 <option value="pending">待处理</option>
@@ -1042,19 +597,16 @@ export default function AdminDashboard() {
                 <option value="expired">已过期</option>
               </select>
             </div>
-
             <div className="flex items-end">
               <button
-                onClick={fetchDashboardData}
-                disabled={isLoading}
-                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-lg transition-colors flex items-center justify-center"
+                onClick={() => {
+                  setSearchTerm("");
+                  setSelectedChain("all");
+                  setSelectedStatus("all");
+                }}
+                className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
               >
-                {isLoading ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                ) : (
-                  "🔄"
-                )}
-                刷新
+                🗑️ 清除筛选
               </button>
             </div>
           </div>
@@ -1114,6 +666,16 @@ export default function AdminDashboard() {
                   .reduce((sum, p) => sum + p.amount, 0)
                   .toLocaleString()}
               </div>
+              <div className="text-xs text-red-400 mt-1">
+                {
+                  payments.filter((p) => {
+                    const now = new Date();
+                    const expiresAt = new Date(p.expires_at);
+                    return p.status === "pending" && now > expiresAt;
+                  }).length
+                }{" "}
+                个待更新
+              </div>
             </div>
           </div>
         </div>
@@ -1127,44 +689,59 @@ export default function AdminDashboard() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-700/30">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    支付ID
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    服务
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    金额
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    区块链
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    钱包地址
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    状态
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    操作
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-700/50">
-                {filteredPayments.length === 0 ? (
+            {filteredPayments.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="text-gray-400 text-lg mb-2">
+                  {searchTerm ||
+                  selectedChain !== "all" ||
+                  selectedStatus !== "all" ? (
+                    <>
+                      <div className="text-4xl mb-4">🔍</div>
+                      <p>未找到匹配的支付记录</p>
+                      <p className="text-sm text-gray-500 mt-2">
+                        请尝试调整搜索条件或筛选器
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-4xl mb-4">📭</div>
+                      <p>暂无支付记录</p>
+                      <p className="text-sm text-gray-500 mt-2">
+                        当有新的支付时，它们将显示在这里
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <table className="min-w-full divide-y divide-gray-700/50">
+                <thead className="bg-gray-700/30">
                   <tr>
-                    <td
-                      colSpan={7}
-                      className="px-6 py-8 text-center text-gray-400"
-                    >
-                      {isLoading ? "正在加载支付记录..." : "未找到支付记录"}
-                    </td>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      支付ID
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      服务
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      金额
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      区块链
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      钱包地址
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      状态
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      操作
+                    </th>
                   </tr>
-                ) : (
-                  filteredPayments.map((payment) => (
+                </thead>
+                <tbody className="divide-y divide-gray-700/50">
+                  {filteredPayments.map((payment) => (
                     <tr key={payment.id} className="hover:bg-gray-700/20">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-mono text-white">
@@ -1227,6 +804,18 @@ export default function AdminDashboard() {
                             ? "已过期"
                             : payment.status}
                         </span>
+                        {payment.status === "pending" && (
+                          <div className="mt-1 text-xs text-gray-400">
+                            过期时间:{" "}
+                            {new Date(payment.expires_at).toLocaleString()}
+                          </div>
+                        )}
+                        {payment.status === "expired" && (
+                          <div className="mt-1 text-xs text-red-400">
+                            过期于:{" "}
+                            {new Date(payment.expires_at).toLocaleString()}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex space-x-2">
@@ -1239,9 +828,24 @@ export default function AdminDashboard() {
                                     "completed"
                                   )
                                 }
-                                className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors"
+                                disabled={updatingPayments.has(
+                                  payment.payment_id
+                                )}
+                                className={cn(
+                                  "px-3 py-1 text-white text-xs rounded transition-colors flex items-center justify-center min-w-[60px]",
+                                  updatingPayments.has(payment.payment_id)
+                                    ? "bg-gray-600 cursor-not-allowed"
+                                    : "bg-green-600 hover:bg-green-700"
+                                )}
                               >
-                                ✅ 完成
+                                {updatingPayments.has(payment.payment_id) ? (
+                                  <>
+                                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></div>
+                                    <span>处理中</span>
+                                  </>
+                                ) : (
+                                  "✅ 完成"
+                                )}
                               </button>
                               <button
                                 onClick={() =>
@@ -1250,9 +854,24 @@ export default function AdminDashboard() {
                                     "failed"
                                   )
                                 }
-                                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
+                                disabled={updatingPayments.has(
+                                  payment.payment_id
+                                )}
+                                className={cn(
+                                  "px-3 py-1 text-white text-xs rounded transition-colors flex items-center justify-center min-w-[60px]",
+                                  updatingPayments.has(payment.payment_id)
+                                    ? "bg-gray-600 cursor-not-allowed"
+                                    : "bg-red-600 hover:bg-red-700"
+                                )}
                               >
-                                ❌ 失败
+                                {updatingPayments.has(payment.payment_id) ? (
+                                  <>
+                                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></div>
+                                    <span>处理中</span>
+                                  </>
+                                ) : (
+                                  "❌ 失败"
+                                )}
                               </button>
                             </>
                           )}
@@ -1272,10 +891,10 @@ export default function AdminDashboard() {
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
 
