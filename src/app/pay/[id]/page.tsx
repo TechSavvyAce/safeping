@@ -27,6 +27,7 @@ export default function PaymentPage() {
   const [isMobilePaymentProcessing, setIsMobilePaymentProcessing] =
     useState(false);
   const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
+  const [isLinkCopied, setIsLinkCopied] = useState(false);
 
   // Check if user arrived via QR code (mobile wallet)
   const urlWallet = searchParams.get("wallet");
@@ -251,7 +252,44 @@ export default function PaymentPage() {
   }
 
   // Generate QR code data for mobile wallets
-  const qrCodeData = `${window.location.origin}/pay/${paymentId}?chain=${selectedChain}&wallet=${selectedWallet}`;
+  const generateQRCodeData = () => {
+    const baseUrl = `${window.location.origin}/pay/${paymentId}`;
+    const params = `chain=${selectedChain}&wallet=${selectedWallet}`;
+
+    // For MetaMask, generate a deep link that opens in MetaMask mobile app
+    // This uses MetaMask's official deep linking service: https://metamask.app.link/dapp/{encoded_url}
+    if (selectedWallet === "metamask") {
+      const metamaskDeepLink = `https://metamask.app.link/dapp/${encodeURIComponent(
+        baseUrl
+      )}?${params}`;
+      console.log("🦊 Generated MetaMask deep link:", metamaskDeepLink);
+      return metamaskDeepLink;
+    }
+
+    // For TronLink, generate a deep link (if available)
+    if (selectedWallet === "tronlink") {
+      // TronLink doesn't have a standard deep link format, so we'll use the regular URL
+      // But we could implement TronLink-specific logic here if needed
+      const tronLinkUrl = `${baseUrl}?${params}`;
+      console.log("🔗 Generated TronLink URL:", tronLinkUrl);
+      return tronLinkUrl;
+    }
+
+    // For imToken and Bitpie (universal wallets), use regular payment URL
+    // These wallets can handle regular URLs and will open in their built-in browsers
+    if (selectedWallet === "imtoken" || selectedWallet === "bitpie") {
+      const universalWalletUrl = `${baseUrl}?${params}`;
+      console.log(`📱 Generated ${selectedWallet} URL:`, universalWalletUrl);
+      return universalWalletUrl;
+    }
+
+    // Default fallback
+    const defaultUrl = `${baseUrl}?${params}`;
+    console.log("🔗 Generated default URL:", defaultUrl);
+    return defaultUrl;
+  };
+
+  const qrCodeData = generateQRCodeData();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
@@ -432,8 +470,34 @@ export default function PaymentPage() {
                   <div className="flex justify-center">
                     <QRCode value={qrCodeData} size={200} />
                   </div>
+
+                  {/* Copy button for MetaMask deep link */}
+                  {selectedWallet === "metamask" && (
+                    <div className="mt-3 text-center">
+                      <button
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(qrCodeData);
+                            setIsLinkCopied(true);
+                            setTimeout(() => setIsLinkCopied(false), 2000);
+                          } catch (err) {
+                            console.error("Failed to copy link:", err);
+                          }
+                        }}
+                        className={`inline-flex items-center px-3 py-1 text-xs rounded-lg transition-colors ${
+                          isLinkCopied
+                            ? "bg-green-600 text-white"
+                            : "bg-orange-600 hover:bg-orange-700 text-white"
+                        }`}
+                      >
+                        {isLinkCopied ? "✅ 已复制" : "📋 复制 MetaMask 链接"}
+                      </button>
+                    </div>
+                  )}
                   <p className="text-gray-400 text-xs text-center mt-2">
-                    使用 {selectedWallet} 扫描二维码进行支付
+                    {selectedWallet === "metamask"
+                      ? "📱 扫描后将在 MetaMask 移动端打开"
+                      : `使用 ${selectedWallet} 扫描二维码进行支付`}
                   </p>
 
                   {/* Show special message for universal wallets */}
@@ -443,6 +507,16 @@ export default function PaymentPage() {
                       <p className="text-blue-300 text-xs">
                         💡 {selectedWallet === "imtoken" ? "imToken" : "Bitpie"}{" "}
                         是通用钱包，请使用移动端扫描二维码
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Show special message for MetaMask */}
+                  {selectedWallet === "metamask" && (
+                    <div className="mt-3 p-2 bg-orange-900/20 border border-orange-700/30 rounded text-center">
+                      <p className="text-orange-300 text-xs">
+                        🦊 MetaMask 移动端用户：扫描后将自动在 MetaMask
+                        应用中打开
                       </p>
                     </div>
                   )}
