@@ -3,7 +3,6 @@
 // =================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { env } from "@/config/env";
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,8 +11,6 @@ export async function POST(request: NextRequest) {
       NODE_ENV: process.env.NODE_ENV,
       ADMIN_USERNAME: process.env.ADMIN_USERNAME,
       ADMIN_PASSWORD: process.env.ADMIN_PASSWORD ? "***" : "undefined",
-      envUsername: env.ADMIN_USERNAME,
-      envPassword: env.ADMIN_PASSWORD ? "***" : "undefined",
     });
 
     const { username, password } = await request.json();
@@ -22,14 +19,17 @@ export async function POST(request: NextRequest) {
     console.log("🔐 Admin Auth Debug:", {
       receivedUsername: username,
       receivedPassword: password ? "***" : "undefined",
-      envUsername: env.ADMIN_USERNAME,
-      envPassword: env.ADMIN_PASSWORD ? "***" : "undefined",
-      usernameMatch: username === env.ADMIN_USERNAME,
-      passwordMatch: password === env.ADMIN_PASSWORD,
+      envUsername: process.env.ADMIN_USERNAME,
+      envPassword: process.env.ADMIN_PASSWORD ? "***" : "undefined",
+      usernameMatch: username === process.env.ADMIN_USERNAME,
+      passwordMatch: password === process.env.ADMIN_PASSWORD,
     });
 
     // Check credentials using environment configuration
-    if (username === env.ADMIN_USERNAME && password === env.ADMIN_PASSWORD) {
+    if (
+      username === process.env.ADMIN_USERNAME &&
+      password === process.env.ADMIN_PASSWORD
+    ) {
       console.log("✅ Admin authentication successful");
       return NextResponse.json(
         {

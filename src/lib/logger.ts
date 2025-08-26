@@ -2,8 +2,6 @@
 // 📝 Production Logging Utility
 // =================================
 
-import { getEnvironment } from "./env-validation";
-
 type LogLevel = "error" | "warn" | "info" | "debug";
 
 interface LogEntry {
@@ -20,9 +18,8 @@ class Logger {
   private enableRequestLogging: boolean;
 
   constructor() {
-    const env = getEnvironment();
-    this.logLevel = env.LOG_LEVEL;
-    this.enableRequestLogging = env.ENABLE_REQUEST_LOGGING;
+    this.logLevel = (process.env.LOG_LEVEL as LogLevel) || "info";
+    this.enableRequestLogging = process.env.ENABLE_REQUEST_LOGGING === "true";
   }
 
   private shouldLog(level: LogLevel): boolean {

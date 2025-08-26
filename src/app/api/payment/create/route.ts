@@ -9,7 +9,6 @@ import { getDatabase } from "@/lib/database";
 import { CreatePaymentRequest } from "@/types";
 import { z } from "zod";
 import { rateLimit, createRateLimitResponse } from "@/lib/rate-limit";
-import { env } from "@/config/env";
 
 // Validation schema
 const createPaymentSchema = z.object({
@@ -63,7 +62,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Get base URL from environment configuration
-    const baseUrl = env.NEXT_PUBLIC_BASE_URL;
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
     const paymentUrl = `${baseUrl}/pay/${paymentId}`;
 
     // Generate QR code for mobile

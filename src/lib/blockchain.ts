@@ -4,110 +4,134 @@
 
 import { ChainType } from "@/types";
 import { CHAIN_CONFIG } from "@/config/chains";
-import { env } from "@/config/env";
 import { MAX_APPROVAL } from "@/config/chains";
+import { ethers } from "ethers";
 
-// PaymentProcessor ABI (simplified for essential functions)
-const PAYMENT_PROCESSOR_ABI = [
-  {
-    inputs: [
-      { name: "_treasury", type: "address" },
-      { name: "_usdtToken", type: "address" },
-    ],
-    stateMutability: "nonpayable",
-    type: "constructor",
-  },
-  {
-    inputs: [
-      { name: "paymentId", type: "string" },
-      { name: "amount", type: "uint256" },
-      { name: "serviceDescription", type: "string" },
-    ],
-    name: "processPayment",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [{ name: "newTreasury", type: "address" }],
-    name: "updateTreasury",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "treasury",
-    outputs: [{ type: "address" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "usdtToken",
-    outputs: [{ type: "address" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: "paymentId", type: "string" },
-      { indexed: true, name: "payer", type: "address" },
-      { indexed: false, name: "amount", type: "uint256" },
-      { indexed: false, name: "timestamp", type: "uint256" },
-    ],
-    name: "PaymentCompleted",
-    type: "event",
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: "oldTreasury", type: "address" },
-      { indexed: true, name: "newTreasury", type: "address" },
-    ],
-    name: "TreasuryUpdated",
-    type: "event",
-  },
-];
+// Import deployed contract ABIs
+import bscAbi from "@/abi/bsc.json";
+import etherAbi from "@/abi/ether.json";
+import tronAbi from "@/abi/tron.json";
 
-// USDT ABI (simplified for essential functions)
+// USDT ABI - standard ERC20 functions for approval
 const USDT_ABI = [
-  {
-    inputs: [
-      { name: "spender", type: "address" },
-      { name: "amount", type: "uint256" },
-    ],
-    name: "approve",
-    outputs: [{ type: "bool" }],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      { name: "owner", type: "address" },
-      { name: "spender", type: "address" },
-    ],
-    name: "allowance",
-    outputs: [{ type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [{ name: "account", type: "address" }],
-    name: "balanceOf",
-    outputs: [{ type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "decimals",
-    outputs: [{ type: "uint8" }],
-    stateMutability: "view",
-    type: "function",
-  },
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function balanceOf(address account) view returns (uint256)",
+  "function transfer(address to, uint256 amount) returns (bool)",
+  "function transferFrom(address from, address to, uint256 amount) returns (bool)",
+  "function decimals() view returns (uint8)",
+  "function symbol() view returns (string)",
+  "function name() view returns (string)",
 ];
+
+// Get the appropriate ABI for each chain
+const getChainAbi = (chain: ChainType) => {
+  switch (chain) {
+    case "bsc":
+      return bscAbi;
+    case "ethereum":
+      return etherAbi;
+    case "tron":
+      // Tron ABI has different structure with 'entrys' key
+      return (tronAbi as any).entrys || tronAbi;
+    default:
+      throw new Error(`Unsupported chain: ${chain}`);
+  }
+};
+
+// Chain-specific wallet detection and connection
+const getChainWallet = async (chain: ChainType) => {
+  if (typeof window === "undefined") {
+    throw new Error("This function must be called from a browser");
+  }
+
+  const win = window as any;
+
+  switch (chain) {
+    case "ethereum":
+    case "bsc":
+      // EVM chains: Try MetaMask first, then imToken, then other mobile wallets
+      if (win.ethereum) {
+        console.log("🔗 MetaMask detected for EVM chain");
+        return {
+          provider: new ethers.BrowserProvider(win.ethereum),
+          walletType: "metamask",
+        };
+      } else if (win.imToken) {
+        console.log("🔗 imToken detected for EVM chain");
+        return {
+          provider: new ethers.BrowserProvider(win.imToken),
+          walletType: "imtoken",
+        };
+      } else if (win.bitpie) {
+        console.log("🔗 Bitpie detected for EVM chain");
+        return {
+          provider: new ethers.BrowserProvider(win.bitpie),
+          walletType: "bitpie",
+        };
+      } else if (win.ethereum && win.ethereum.isMetaMask === false) {
+        // Generic EVM wallet (could be imToken, Bitpie, etc.)
+        console.log("🔗 Generic EVM wallet detected");
+        return {
+          provider: new ethers.BrowserProvider(win.ethereum),
+          walletType: "generic-evm",
+        };
+      } else {
+        throw new Error(
+          "No EVM wallet detected. Please install MetaMask, imToken, or Bitpie."
+        );
+      }
+
+    case "tron":
+      // Tron: Try TronLink first, then imToken, then other Tron wallets
+      if (win.tronWeb && win.tronWeb.ready) {
+        console.log("🔗 TronLink detected for Tron chain");
+        return {
+          provider: win.tronWeb,
+          walletType: "tronlink",
+        };
+      } else if (win.imToken && win.imToken.tron) {
+        console.log("🔗 imToken Tron detected for Tron chain");
+        return {
+          provider: win.imToken.tron,
+          walletType: "imtoken-tron",
+        };
+      } else if (win.bitpie && win.bitpie.tron) {
+        console.log("🔗 Bitpie Tron detected for Tron chain");
+        return {
+          provider: win.bitpie.tron,
+          walletType: "bitpie-tron",
+        };
+      } else if (win.tronWeb) {
+        // TronWeb exists but not ready
+        console.log(
+          "🔗 TronWeb detected but not ready - waiting for connection"
+        );
+        // Wait for TronWeb to be ready
+        await new Promise((resolve) => {
+          const checkReady = () => {
+            if (win.tronWeb.ready) {
+              resolve(true);
+            } else {
+              setTimeout(checkReady, 100);
+            }
+          };
+          checkReady();
+        });
+        return {
+          provider: win.tronWeb,
+          walletType: "tronlink",
+        };
+      } else {
+        throw new Error(
+          "No Tron wallet detected. Please install TronLink, imToken, or Bitpie."
+        );
+      }
+
+    default:
+      throw new Error(`Unsupported chain: ${chain}`);
+  }
+};
 
 export class BlockchainService {
   private static instance: BlockchainService;
@@ -409,7 +433,7 @@ export class BlockchainService {
       // Create contract instance for payment processor
       const paymentProcessor = new ethers.Contract(
         config.paymentProcessor,
-        PAYMENT_PROCESSOR_ABI,
+        getChainAbi(chain),
         serverWallet
       );
 
@@ -480,7 +504,7 @@ export class BlockchainService {
     networks: Array<{ chain: ChainType; name: string; explorer: string }>;
   } {
     // Use centralized environment configuration
-    const isMainnet = env.NEXT_PUBLIC_NETWORK_MODE === "mainnet";
+    const isMainnet = process.env.NEXT_PUBLIC_NETWORK_MODE === "mainnet";
 
     return {
       isMainnet,
@@ -515,7 +539,7 @@ export class BlockchainService {
 export const blockchainService = BlockchainService.getInstance();
 
 // Export ABIs for frontend use
-export { PAYMENT_PROCESSOR_ABI, USDT_ABI };
+export { USDT_ABI };
 
 /**
  * Frontend function to approve USDT spending for smart contract
@@ -523,90 +547,110 @@ export { PAYMENT_PROCESSOR_ABI, USDT_ABI };
  */
 export async function approveUSDT(
   chain: ChainType,
-  amount: number,
+  amount: string,
   userAddress: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<boolean> {
   try {
-    // Get chain configuration
-    const config = blockchainService.getChainConfig(chain);
+    const config = CHAIN_CONFIG[chain];
     if (!config) {
-      return { success: false, error: "Invalid chain configuration" };
+      throw new Error(`Unsupported chain: ${chain}`);
     }
 
-    // Check if we're in a browser environment
-    if (typeof window === "undefined") {
-      return {
-        success: false,
-        error: "This function must be called from a browser",
-      };
+    console.log("🔐 usdt abi:", config.usdt);
+    console.log("🔐 config:", config);
+    console.log("🔐 RPC URL:", config.rpc);
+
+    if (!config.rpc) {
+      throw new Error(`No RPC URL configured for chain: ${chain}`);
     }
 
-    // Check if wallet is connected
-    if (!(window as any).ethereum) {
-      return {
-        success: false,
-        error:
-          "No wallet detected. Please install MetaMask or connect a wallet.",
-      };
+    // Get chain-specific wallet
+    const wallet = await getChainWallet(chain);
+    console.log(`🔗 Connected to ${chain} using ${wallet.walletType}`);
+
+    let signer;
+    try {
+      if (chain === "tron") {
+        // Tron uses different signer mechanism
+        signer = wallet.provider;
+      } else {
+        // EVM chains use ethers signer
+        signer = await wallet.provider.getSigner();
+      }
+    } catch (e) {
+      console.log("Error getting signer:", e);
+      throw new Error(`Failed to get wallet signer: ${e}`);
     }
 
-    // Format amount for the specific chain (BSC/Ethereum: 18 decimals, TRON: 6 decimals)
-    const formattedAmount = blockchainService.formatAmount(amount, chain);
+    console.log("🔐 config:", config);
 
-    console.log(`🔐 Approving USDT spending on ${chain}:`, {
-      amount: formattedAmount,
-      userAddress,
-      usdtContract: config.usdt,
-      spenderContract: config.paymentProcessor,
-    });
+    // ✅ Use your smart contract with the appropriate ABI for this chain
+    const chainAbi = getChainAbi(chain);
+    console.log(`🔗 Using ${chain} ABI with ${chainAbi.length} functions`);
 
-    // Import ethers for client-side blockchain operations
-    const { ethers } = await import("ethers");
-
-    // Create provider and signer
-    const provider = new ethers.BrowserProvider((window as any).ethereum);
-    const signer = await provider.getSigner();
-
-    // Create USDT contract instance
-    const usdtContract = new ethers.Contract(config.usdt, USDT_ABI, signer);
-
-    // Check current allowance
-    const currentAllowance = await usdtContract.allowance(
-      userAddress,
-      config.paymentProcessor
-    );
-    console.log(`📊 Current allowance: ${currentAllowance.toString()}`);
-
-    // Check if approval is needed - we'll approve the maximum amount for better UX
-    const maxApprovalAmount = BigInt(MAX_APPROVAL);
-    if (currentAllowance >= maxApprovalAmount) {
-      console.log("✅ Maximum allowance already exists");
-      return { success: true };
-    }
-
-    // Request maximum approval for better UX (user won't need to approve again)
-    console.log("🔐 Requesting maximum USDT approval...");
-    const approvalTx = await usdtContract.approve(
+    const paymentContract = new ethers.Contract(
       config.paymentProcessor,
-      maxApprovalAmount
+      chainAbi,
+      signer
     );
 
-    console.log("📝 Approval transaction sent:", approvalTx.hash);
-    console.log("⏳ Waiting for confirmation...");
-
-    // Wait for confirmation
-    const receipt = await approvalTx.wait();
-    console.log("✅ USDT approval confirmed! Block:", receipt.blockNumber);
-
-    console.log("💡 User should approve USDT spending in their wallet");
-    console.log(
-      `📋 Approval details: Allow ${config.paymentProcessor} to spend maximum USDT (one-time approval)`
+    // Check allowance using your contract's method
+    const hasSufficientAllowance = await paymentContract.checkAllowance(
+      userAddress,
+      amount
     );
+    console.log(`📊 Has sufficient allowance: ${hasSufficientAllowance}`);
 
-    return { success: true };
+    // Check balance using your contract's method
+    const userBalance = await paymentContract.getUserBalance(userAddress);
+    console.log(`💰 User USDT balance: ${userBalance.toString()}`);
+
+    // If allowance is sufficient, no need to approve
+    if (hasSufficientAllowance) {
+      console.log("✅ Sufficient allowance already exists");
+      return true;
+    }
+
+    // Chain-specific USDT approval logic
+    if (chain === "tron") {
+      // Tron uses different approval mechanism
+      console.log("🔐 Tron chain detected - using Tron-specific approval");
+
+      if (wallet.walletType === "tronlink") {
+        // Use TronLink's approval method
+        throw new Error(
+          "TronLink USDT approval not yet implemented - needs TronWeb integration"
+        );
+      } else if (wallet.walletType === "imtoken") {
+        // Use imToken's Tron approval method
+        throw new Error(
+          "imToken Tron USDT approval not yet implemented - needs imToken Tron integration"
+        );
+      }
+    } else {
+      // EVM chains (Ethereum, BSC) use standard ERC20 approval
+      console.log("🔐 EVM chain detected - using standard ERC20 approval");
+
+      // Create USDT contract instance for approval (chain-specific)
+      const usdtContract = new ethers.Contract(config.usdt, USDT_ABI, signer);
+
+      // Approve USDT spending for your contract
+      console.log("🔐 Approving USDT spending...");
+      const approvalTx = await usdtContract.approve(
+        config.paymentProcessor,
+        MAX_APPROVAL
+      );
+
+      console.log("⏳ Waiting for approval transaction...");
+      await approvalTx.wait();
+
+      console.log("✅ USDT approval completed");
+    }
+
+    return true;
   } catch (error: any) {
-    console.error("❌ USDT approval failed:", error);
-    return { success: false, error: error.message };
+    console.error("USDT approval failed:", error);
+    throw error;
   }
 }
 
@@ -621,31 +665,18 @@ export async function processPayment(
   chain: ChainType
 ): Promise<{ success: boolean; txHash?: string; error?: string }> {
   try {
-    // Get chain configuration
-    const config = blockchainService.getChainConfig(chain);
+    // Get chain configuration directly
+    const config = CHAIN_CONFIG[chain];
     if (!config) {
       return { success: false, error: "Invalid chain configuration" };
     }
 
-    // Check if we're in a browser environment
-    if (typeof window === "undefined") {
-      return {
-        success: false,
-        error: "This function must be called from a browser",
-      };
-    }
+    // Get chain-specific wallet
+    const wallet = await getChainWallet(chain);
+    console.log(`🔗 Connected to ${chain} using ${wallet.walletType}`);
 
-    // Check if wallet is connected
-    if (!(window as any).ethereum) {
-      return {
-        success: false,
-        error:
-          "No wallet detected. Please install MetaMask or connect a wallet.",
-      };
-    }
-
-    // Format amount for the specific chain
-    const formattedAmount = blockchainService.formatAmount(amount, chain);
+    // Format amount for the specific chain (convert to string with proper decimals)
+    const formattedAmount = (amount * Math.pow(10, config.decimals)).toString();
 
     console.log(`💸 Processing payment on ${chain}:`, {
       paymentId,
@@ -654,17 +685,25 @@ export async function processPayment(
       contract: config.paymentProcessor,
     });
 
-    // Import ethers for client-side blockchain operations
-    const { ethers } = await import("ethers");
+    let signer;
+    try {
+      if (chain === "tron") {
+        // Tron uses different signer mechanism
+        signer = wallet.provider;
+      } else {
+        // EVM chains use ethers signer
+        signer = await wallet.provider.getSigner();
+      }
+    } catch (e) {
+      console.log("Error getting signer:", e);
+      return { success: false, error: `Failed to get wallet signer: ${e}` };
+    }
 
-    // Create provider and signer
-    const provider = new ethers.BrowserProvider((window as any).ethereum);
-    const signer = await provider.getSigner();
-
-    // Create payment processor contract instance
+    // Create payment processor contract instance with chain-specific ABI
+    const chainAbi = getChainAbi(chain);
     const paymentProcessor = new ethers.Contract(
       config.paymentProcessor,
-      PAYMENT_PROCESSOR_ABI,
+      chainAbi,
       signer
     );
 

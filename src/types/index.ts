@@ -175,6 +175,7 @@ export interface UseWalletReturn {
   disconnect: () => void;
   getBalance: (address?: string, chain?: ChainType) => Promise<void>;
   approveUSDT: (
+    chain: ChainType,
     amount?: string,
     targetWallet?: WalletConnection
   ) => Promise<ApprovalResponse>;

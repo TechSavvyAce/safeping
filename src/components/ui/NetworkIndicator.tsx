@@ -36,7 +36,7 @@ export function NetworkIndicator({
       try {
         const response = await fetch("/api/config");
         const config = await response.json();
-        setNetworkInfo(config.network);
+        // setNetworkInfo(config.network);
       } catch (error) {
         console.error("Failed to fetch network info:", error);
       } finally {

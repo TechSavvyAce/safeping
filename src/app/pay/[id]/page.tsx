@@ -1,323 +1,114 @@
-// =================================
-// 💳 支付页面 - 移动优先设计
-// =================================
-
 "use client";
 
 import React, { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import i18n from "@/lib/i18n";
-import { ChainType, WalletConnection } from "@/types";
+import { ChainType } from "@/types";
 import { usePayment } from "@/hooks/usePayment";
-import { WalletSelector } from "@/components/payment/WalletSelector";
 import { PaymentSteps } from "@/components/payment/PaymentSteps";
 import { PaymentStatus } from "@/components/payment/PaymentStatus";
 import { PaymentTimer } from "@/components/payment/PaymentTimer";
 import { NetworkIndicator } from "@/components/ui/NetworkIndicator";
-import { cn } from "@/utils/cn";
+import { QRCode } from "@/components/ui/QRCode";
 
 export default function PaymentPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const paymentId = params.id as string;
   const { t } = useTranslation();
-
   const { payment, isLoading, error, refetch } = usePayment(paymentId);
 
-  // Handle language from payment metadata with URL parameter override
+  // Default state - Ethereum + MetaMask
+  const [selectedChain, setSelectedChain] = useState<ChainType>("ethereum");
+  const [selectedWallet, setSelectedWallet] = useState<string>("metamask");
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+
+  // Check if user arrived via QR code (mobile wallet)
+  const urlWallet = searchParams.get("wallet");
+  const urlChain = searchParams.get("chain") as ChainType;
+  const isMobileWalletUser = urlWallet && urlChain;
+
+  // Auto-set chain/wallet if user arrived via QR code
+  useEffect(() => {
+    if (isMobileWalletUser) {
+      setSelectedChain(urlChain);
+      setSelectedWallet(urlWallet);
+      console.log(
+        `📱 Mobile wallet user detected: ${urlWallet} on ${urlChain}`
+      );
+    }
+  }, [isMobileWalletUser, urlChain, urlWallet]);
+
+  // Handle language from payment metadata
   useEffect(() => {
     const targetLanguage = payment?.language || "zh";
     i18n.changeLanguage(targetLanguage);
   }, [payment]);
 
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
-
-  // Get URL parameters for wallet and chain
-  const urlWallet = searchParams.get("wallet");
-  const urlChain = searchParams.get("chain") as ChainType;
-
-  const [selectedChain, setSelectedChain] = useState<ChainType | null>(
-    urlChain || "ethereum" // Default to Ethereum if no URL parameter
-  );
-  const [selectedWallet, setSelectedWallet] = useState<string | null>(
-    urlWallet || "metamask" // Default to MetaMask if no URL parameter
-  );
-  const [currentStep, setCurrentStep] = useState<"chain-selection" | "payment">(
-    urlChain && urlWallet ? "payment" : "chain-selection"
-  );
-
-  // Handle URL parameters on load
-  useEffect(() => {
-    if (urlChain && urlWallet) {
-      setSelectedChain(urlChain);
-      setSelectedWallet(urlWallet);
-      setCurrentStep("payment");
-
-      // Check if this is a WalletConnect connection
-      const isWalletConnect = searchParams.get("connect") === "walletconnect";
-
-      if (isWalletConnect) {
-        // Handle WalletConnect for imToken/Bitpie
-        handleWalletConnectPayment(urlWallet, urlChain);
-      } else {
-        // Handle regular QR code or deep link
-        handleAutoPayment(urlWallet, urlChain);
-      }
-    } else if (urlChain) {
-      setSelectedChain(urlChain);
-      setCurrentStep("chain-selection");
-    } else {
-      // Set default chain and wallet if none provided
-      setSelectedChain("ethereum");
-      setSelectedWallet("metamask");
-    }
-  }, [urlChain, urlWallet, searchParams]);
-
-  // Handle WalletConnect payment for mobile wallets
-  const handleWalletConnectPayment = async (
-    walletType: string,
-    chainType: string
-  ) => {
-    console.log(
-      `🔗 WalletConnect payment initiated for ${walletType} on ${chainType}`
-    );
-
+  // Simple wallet connection (only for MetaMask/TronLink)
+  const connectWallet = async () => {
     try {
-      setCurrentStep("payment");
+      if (typeof window === "undefined") return;
 
-      // For WalletConnect, we need to establish a connection
-      // This would typically involve WalletConnect SDK
-      console.log("📱 Establishing WalletConnect session...");
+      const win = window as any;
 
-      // Simulate WalletConnect connection
-      const walletConnectAddress = `wc-${walletType}-${Date.now()}`;
-      setWalletAddress(walletConnectAddress);
-
-      console.log("✅ WalletConnect session established");
-    } catch (error) {
-      console.error("❌ WalletConnect failed:", error);
-      setCurrentStep("chain-selection");
-    }
-  };
-
-  // Auto-payment handler for QR code users
-  const handleAutoPayment = async (walletType: string, chainType: string) => {
-    console.log(`🚀 Auto-payment initiated for ${walletType} on ${chainType}`);
-
-    try {
-      // Set processing state
-      setCurrentStep("payment");
-
-      // Simulate wallet connection for QR code users
-      const mockWalletAddress = `qr-${walletType}-${Date.now()}`;
-      setWalletAddress(mockWalletAddress);
-
-      // Don't auto-process - wait for user to click Pay button
-      console.log("📱 QR Code user detected - waiting for Pay button click");
-    } catch (error) {
-      console.error("❌ Auto-payment failed:", error);
-      // Fall back to manual connection
-      setCurrentStep("chain-selection");
-    }
-  };
-
-  // Handle Pay button click for QR code users
-  const handlePayButtonClick = async () => {
-    if (!selectedWallet || !selectedChain) return;
-
-    console.log(
-      `💰 Pay button clicked for ${selectedWallet} on ${selectedChain}`
-    );
-
-    try {
-      // Auto-process payment based on wallet type
-      if (selectedWallet === "metamask" || selectedWallet === "imtoken") {
-        // EVM wallets - use backend processing
-        await handleBackendPayment(
-          `qr-${selectedWallet}-${Date.now()}`,
-          selectedChain
-        );
-      } else if (selectedWallet === "tronlink") {
-        // TRON wallet - use TRON-specific processing
-        await handleTronPayment(
-          `qr-${selectedWallet}-${Date.now()}`,
-          selectedChain
-        );
-      } else if (selectedWallet === "bitpie") {
-        // Bitpie wallet - use backend processing
-        await handleBackendPayment(
-          `qr-${selectedWallet}-${Date.now()}`,
-          selectedChain
-        );
-      }
-    } catch (error) {
-      console.error("❌ Payment failed:", error);
-    }
-  };
-
-  // Backend payment processing for EVM chains
-  const handleBackendPayment = async (
-    walletAddress: string,
-    chainType: string
-  ) => {
-    try {
-      console.log("🔄 Processing backend payment for EVM chain...");
-
-      const response = await fetch(`/api/payment/${paymentId}/process`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          wallet_address: walletAddress,
-          chain: chainType,
-          auto_processed: true,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Backend payment failed");
-      }
-
-      const result = await response.json();
-      console.log("✅ Backend payment completed:", result);
-
-      // Refresh payment status
-      refetch();
-    } catch (error) {
-      console.error("❌ Backend payment failed:", error);
-      throw error;
-    }
-  };
-
-  // TRON-specific payment processing
-  const handleTronPayment = async (
-    walletAddress: string,
-    chainType: string
-  ) => {
-    try {
-      console.log("🔄 Processing TRON payment...");
-
-      // TRON payments might need different handling
-      // For now, use the same backend endpoint
-      await handleBackendPayment(walletAddress, chainType);
-    } catch (error) {
-      console.error("❌ TRON payment failed:", error);
-      throw error;
-    }
-  };
-
-  // Progress to payment step when wallet is connected
-  useEffect(() => {
-    if (walletAddress && selectedChain && selectedWallet) {
-      setCurrentStep("payment");
-    }
-  }, [walletAddress, selectedChain, selectedWallet]);
-
-  const handleChainSelect = async (chain: ChainType) => {
-    setSelectedChain(chain);
-
-    // Update payment record with selected chain
-    try {
-      const response = await fetch(`/api/payment/${paymentId}/update-chain`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chain }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Failed to update payment chain:", errorData);
-      } else {
-        console.log(`✅ Payment chain updated to: ${chain}`);
-        // Refetch payment data to get updated chain
-        refetch();
-      }
-    } catch (error) {
-      console.error("Error updating payment chain:", error);
-    }
-  };
-
-  const handleStartPayment = async (walletId: string, address: string) => {
-    if (!selectedChain || !payment) return;
-
-    console.log("🚀 Starting payment process for:", address);
-    console.log("📋 Payment details:", {
-      amount: payment.amount,
-      chain: selectedChain,
-      wallet: walletId,
-      address: address,
-    });
-
-    // Set wallet info and move to payment step
-    setSelectedWallet(walletId);
-    setWalletAddress(address);
-    setCurrentStep("payment");
-
-    console.log("✅ Moved to payment step - ready for USDT approval");
-    console.log(
-      "💡 Next: User will need to approve USDT spending in their wallet"
-    );
-  };
-
-  const handleBackToChainSelection = () => {
-    setSelectedChain(null);
-    setSelectedWallet(null);
-    setWalletAddress(null);
-    setCurrentStep("chain-selection");
-    // Clear URL parameters
-    window.history.pushState({}, "", window.location.pathname);
-  };
-
-  const handleApprovalComplete = async () => {
-    console.log(
-      "✅ Approval completed - Starting automatic backend transfer..."
-    );
-
-    if (!walletAddress || !payment) {
-      console.error("❌ Missing wallet or payment data for auto transfer");
-      return;
-    }
-
-    try {
-      console.log("🔄 Processing automatic backend payment...");
-
-      // Call backend to process payment automatically
-      const response = await fetch(
-        `/api/payment/${payment.payment_id}/process`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wallet_address: walletAddress }),
+      if (selectedChain === "tron") {
+        // Tron wallet connection
+        if (win.tronWeb && win.tronWeb.ready) {
+          const address = win.tronWeb.defaultAddress.base58;
+          setWalletAddress(address);
+          setIsConnected(true);
+          console.log("🔗 TronLink connected:", address);
+        } else {
+          alert("Please install TronLink wallet");
         }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Backend payment failed");
+      } else {
+        // EVM wallet connection (MetaMask only)
+        if (win.ethereum) {
+          const provider = new (await import("ethers")).BrowserProvider(
+            win.ethereum
+          );
+          const signer = await provider.getSigner();
+          const address = await signer.getAddress();
+          setWalletAddress(address);
+          setIsConnected(true);
+          console.log("🔗 MetaMask connected:", address);
+        } else {
+          alert("Please install MetaMask wallet");
+        }
       }
-
-      const result = await response.json();
-      console.log("✅ Backend payment completed:", result);
-
-      // Refresh payment status
-      refetch();
-    } catch (error: any) {
-      console.error("❌ Automatic backend payment failed:", error);
-      // You might want to show an error state or retry mechanism here
+    } catch (error) {
+      console.error("❌ Wallet connection failed:", error);
+      alert("Failed to connect wallet");
     }
   };
 
+  // Simple wallet disconnection
+  const disconnectWallet = () => {
+    setWalletAddress(null);
+    setIsConnected(false);
+    console.log("🔌 Wallet disconnected");
+  };
+
+  // Handle payment completion
   const handlePaymentComplete = () => {
     console.log("🎉 Payment completed!");
     refetch();
   };
 
+  // Handle payment expiration
   const handleExpire = () => {
     console.log("⏰ Payment expired");
     refetch();
   };
 
-  // Loading state - Dark Chinese theme
+  // Check if selected wallet needs browser connection
+  const needsBrowserWallet =
+    selectedWallet === "metamask" || selectedWallet === "tronlink";
+
+  // Loading state
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
@@ -334,7 +125,7 @@ export default function PaymentPage() {
     );
   }
 
-  // Error state - Beautiful Chinese style
+  // Error state
   if (error || !payment) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-purple-800">
@@ -359,10 +150,13 @@ export default function PaymentPage() {
     );
   }
 
+  // Generate QR code data for mobile wallets
+  const qrCodeData = `${window.location.origin}/pay/${paymentId}?chain=${selectedChain}&wallet=${selectedWallet}`;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
       <div className="max-w-lg mx-auto min-h-screen bg-gray-900 shadow-2xl border border-gray-800">
-        {/* Beautiful Header with Chinese Red Gradient */}
+        {/* Header */}
         <header className="bg-gradient-to-r from-red-600 to-red-700 text-white relative overflow-hidden">
           <div className="relative z-10 px-4 py-4">
             <div className="flex items-center justify-between">
@@ -379,17 +173,17 @@ export default function PaymentPage() {
           </div>
         </header>
 
-        {/* Main Content - Dark Chinese Theme */}
+        {/* Main Content */}
         <main className="p-4 space-y-4">
-          {/* Unified Payment Block - Sharp & Compact */}
+          {/* Payment Info */}
           <div className="bg-gradient-to-br from-gray-800 to-black rounded-xl p-6 border border-gray-600 relative overflow-hidden">
-            {/* Sharp corner accents */}
+            {/* Corner accents */}
             <div className="absolute top-0 left-0 w-2 h-2 bg-yellow-500"></div>
             <div className="absolute top-0 right-0 w-2 h-2 bg-yellow-500"></div>
             <div className="absolute bottom-0 left-0 w-2 h-2 bg-yellow-500"></div>
             <div className="absolute bottom-0 right-0 w-2 h-2 bg-yellow-500"></div>
 
-            {/* Service Name - Top */}
+            {/* Service Name */}
             <div className="text-center mb-4">
               <h2 className="text-lg font-bold text-white">
                 {payment.service_name}
@@ -397,7 +191,7 @@ export default function PaymentPage() {
               <p className="text-gray-400 text-sm">{payment.description}</p>
             </div>
 
-            {/* Payment ID & Status - Compact Row */}
+            {/* Payment ID & Status */}
             <div className="flex justify-between items-center mb-4">
               <span className="text-gray-400 text-xs">ID: {payment.id}</span>
               <span
@@ -413,7 +207,7 @@ export default function PaymentPage() {
               </span>
             </div>
 
-            {/* USDT Amount - Prominent & Compact */}
+            {/* USDT Amount */}
             <div className="text-center mb-4">
               <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
                 <div className="flex items-baseline justify-center gap-2">
@@ -425,12 +219,12 @@ export default function PaymentPage() {
               </div>
             </div>
 
-            {/* Essential Info - Compact Grid */}
+            {/* Chain & Expiry Info */}
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="bg-gray-700/30 rounded p-2 text-center">
                 <span className="text-gray-400 block">网络</span>
                 <span className="text-white font-medium">
-                  {selectedChain?.toUpperCase() || "未选择"}
+                  {selectedChain.toUpperCase()}
                 </span>
               </div>
               <div className="bg-gray-700/30 rounded p-2 text-center">
@@ -442,7 +236,7 @@ export default function PaymentPage() {
             </div>
           </div>
 
-          {/* Timer - Compact */}
+          {/* Timer */}
           {payment.status === "pending" && (
             <PaymentTimer
               expiresAt={payment.expires_at}
@@ -450,7 +244,7 @@ export default function PaymentPage() {
             />
           )}
 
-          {/* Payment Status - Compact */}
+          {/* Payment Status */}
           {(payment.status === "processing" ||
             payment.status === "completed" ||
             payment.status === "failed" ||
@@ -458,112 +252,151 @@ export default function PaymentPage() {
             <PaymentStatus payment={payment} />
           )}
 
-          {/* Payment Flow - Compact */}
+          {/* Payment Flow */}
           {payment.status === "pending" && (
             <div className="space-y-4">
-              {/* Chain Selection & Wallet */}
-              {currentStep === "chain-selection" && (
+              {/* Chain Selection */}
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <h3 className="text-white font-semibold mb-3">选择网络</h3>
+                <div className="grid grid-cols-3 gap-2">
+                  {["ethereum", "bsc", "tron"].map((chain) => (
+                    <button
+                      key={chain}
+                      onClick={() => setSelectedChain(chain as ChainType)}
+                      className={`p-2 rounded text-sm font-medium transition-all ${
+                        selectedChain === chain
+                          ? "bg-red-600 text-white"
+                          : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      }`}
+                    >
+                      {chain.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Wallet Selection */}
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <h3 className="text-white font-semibold mb-3">选择钱包</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {["metamask", "imtoken", "bitpie", "tronlink"].map(
+                    (wallet) => (
+                      <button
+                        key={wallet}
+                        onClick={() => setSelectedWallet(wallet)}
+                        className={`p-2 rounded text-sm font-medium transition-all ${
+                          selectedWallet === wallet
+                            ? "bg-red-600 text-white"
+                            : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                        }`}
+                      >
+                        {wallet.charAt(0).toUpperCase() + wallet.slice(1)}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+
+              {/* QR Code - Always visible for mobile wallets */}
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <h3 className="text-white font-semibold mb-3 text-center">
+                  📱 移动端扫码支付
+                </h3>
+                <div className="flex justify-center">
+                  <QRCode value={qrCodeData} size={200} />
+                </div>
+                <p className="text-gray-400 text-xs text-center mt-2">
+                  使用 {selectedWallet} 扫描二维码进行支付
+                </p>
+
+                {/* Show special message for universal wallets */}
+                {(selectedWallet === "imtoken" ||
+                  selectedWallet === "bitpie") && (
+                  <div className="mt-3 p-2 bg-blue-900/20 border border-blue-700/30 rounded text-center">
+                    <p className="text-blue-300 text-xs">
+                      💡 {selectedWallet === "imtoken" ? "imToken" : "Bitpie"}{" "}
+                      是通用钱包，扫描后将在钱包内完成支付
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Browser Wallet Connection - Only for MetaMask/TronLink */}
+              {needsBrowserWallet && (
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                  <WalletSelector
-                    selectedChain={selectedChain || "ethereum"}
-                    onStartPayment={handleStartPayment}
-                  />
+                  <h3 className="text-white font-semibold mb-3">
+                    桌面端钱包连接
+                  </h3>
+
+                  {!isConnected ? (
+                    <button
+                      onClick={connectWallet}
+                      className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white py-3 px-6 rounded-lg font-medium transition-all duration-300 transform hover:scale-105"
+                    >
+                      🔗 连接{" "}
+                      {selectedWallet === "metamask" ? "MetaMask" : "TronLink"}{" "}
+                      钱包
+                    </button>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="bg-green-900/20 border border-green-700/30 rounded p-3">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-green-300">钱包已连接</span>
+                          <span className="text-gray-300 font-mono">
+                            {walletAddress?.slice(0, 6)}...
+                            {walletAddress?.slice(-4)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={disconnectWallet}
+                          className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded text-sm transition-colors"
+                        >
+                          🔌 断开连接
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Payment Execution */}
-              {currentStep === "payment" && (
-                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-white font-semibold">
-                      {walletAddress?.startsWith("qr-")
-                        ? "二维码支付处理中"
-                        : "完成支付"}
-                    </h3>
-                    {!urlChain &&
-                      !urlWallet &&
-                      !walletAddress?.startsWith("qr-") && (
-                        <button
-                          onClick={handleBackToChainSelection}
-                          className="text-gray-400 hover:text-white text-sm"
-                        >
-                          返回
-                        </button>
-                      )}
+              {/* Mobile Wallet User Message */}
+              {isMobileWalletUser && (
+                <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-4">
+                  <div className="text-center text-blue-300">
+                    <div className="text-lg mb-2">📱</div>
+                    <p className="font-medium">移动端钱包用户</p>
+                    <p className="text-sm text-blue-400 mt-1">
+                      您正在使用 {selectedWallet} 钱包，请在钱包内完成支付操作
+                    </p>
                   </div>
+                </div>
+              )}
 
-                  {/* Wallet Info - Compact */}
-                  {walletAddress && (
-                    <div
-                      className={cn(
-                        "mb-4 p-3 rounded border",
-                        walletAddress.startsWith("qr-")
-                          ? "bg-blue-900/20 border-blue-700/30"
-                          : "bg-green-900/20 border-green-700/30"
-                      )}
-                    >
-                      <div className="flex items-center justify-between text-sm">
-                        <span
-                          className={
-                            walletAddress.startsWith("qr-")
-                              ? "text-blue-300"
-                              : "text-green-300"
-                          }
-                        >
-                          {walletAddress.startsWith("qr-")
-                            ? "二维码支付"
-                            : "钱包已连接"}
-                        </span>
-                        <span className="text-gray-300 font-mono">
-                          {walletAddress.startsWith("qr-")
-                            ? `QR-${walletAddress.split("-")[1]}`
-                            : `${walletAddress.slice(
-                                0,
-                                6
-                              )}...${walletAddress.slice(-4)}`}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* QR Code Payment Status */}
-                  {walletAddress?.startsWith("qr-") && (
-                    <div className="mb-4 p-3 bg-blue-900/20 rounded border border-blue-700/30">
-                      <div className="text-center text-blue-300 text-sm">
-                        <div className="text-lg mb-2">📱</div>
-                        <p>支付已通过二维码自动发起</p>
-                        <p className="text-xs text-blue-400 mt-1">
-                          请等待区块链确认完成
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Payment Steps */}
-                  {walletAddress && (
-                    <PaymentSteps
-                      payment={payment}
-                      wallet={{
-                        address: walletAddress,
-                        wallet: selectedWallet as any,
-                        chain: selectedChain!,
-                      }}
-                      onApprovalComplete={handleApprovalComplete}
-                      onPaymentComplete={handlePaymentComplete}
-                      onPayButtonClick={
-                        walletAddress?.startsWith("qr-")
-                          ? handlePayButtonClick
-                          : undefined
-                      }
-                    />
-                  )}
+              {/* Payment Steps - Only show when browser wallet is connected */}
+              {isConnected && walletAddress && needsBrowserWallet && (
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                  <PaymentSteps
+                    payment={payment}
+                    wallet={{
+                      address: walletAddress,
+                      wallet: selectedWallet as any,
+                      chain: selectedChain,
+                    }}
+                    onApprovalComplete={() =>
+                      console.log("✅ Approval completed")
+                    }
+                    onPaymentComplete={handlePaymentComplete}
+                  />
                 </div>
               )}
             </div>
           )}
         </main>
 
-        {/* Beautiful Footer - Dark Theme */}
+        {/* Footer */}
         <footer className="bg-gray-800 border-t border-gray-700 mt-4 py-3">
           <div className="text-center px-4">
             <p className="text-xs text-gray-400">

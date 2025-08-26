@@ -6,7 +6,6 @@ import { ethers } from "ethers";
 import { getDatabase } from "./database";
 import { logInfo, logError, logWarn } from "./logger";
 import { CHAIN_CONFIG } from "@/config/chains";
-import { env } from "@/config/env";
 import { ChainType } from "@/types";
 
 interface TransferConfig {
@@ -223,7 +222,10 @@ class AutoTransferService {
 
       // Create provider and wallet
       const provider = new ethers.JsonRpcProvider(chainConfig.rpc);
-      const wallet = new ethers.Wallet(env.ADMIN_PRIVATE_KEY || "", provider);
+      const wallet = new ethers.Wallet(
+        process.env.ADMIN_PRIVATE_KEY || "",
+        provider
+      );
 
       // Create USDT contract instance
       const usdtContract = new ethers.Contract(

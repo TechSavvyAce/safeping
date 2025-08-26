@@ -40,7 +40,7 @@ export function useWalletConnect() {
 
   return {
     address,
-    isConnected,
+    isConnected: isConnected && !!address,
     isConnecting,
     isLoading: isPending, // Map isPending to isLoading for backward compatibility
     connect: connectWallet,

@@ -6,7 +6,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/database";
 import { blockchainService } from "@/lib/blockchain";
 import { rateLimit, createRateLimitResponse } from "@/lib/rate-limit";
-import { env } from "@/config/env";
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,14 +38,12 @@ export async function GET(request: NextRequest) {
     // Get network information
     const networkInfo = blockchainService.getNetworkInfo();
 
-    // Environment configuration is already validated at startup
-
     // Debug logging
     console.log("🔍 Environment configuration:", {
-      NODE_ENV: env.NODE_ENV,
-      NETWORK_MODE: env.NEXT_PUBLIC_NETWORK_MODE,
-      DATABASE_URL: env.DATABASE_URL,
-      WALLETCONNECT_PROJECT_ID: env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
+      NODE_ENV: process.env.NODE_ENV,
+      NETWORK_MODE: process.env.NEXT_PUBLIC_NETWORK_MODE,
+      DATABASE_URL: process.env.DATABASE_URL,
+      WALLETCONNECT_PROJECT_ID: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
         ? "Set"
         : "Not set",
     });
@@ -56,47 +53,23 @@ export async function GET(request: NextRequest) {
     // System health
     const systemHealth = {
       timestamp: new Date().toISOString(),
-      status: "healthy",
-      services: {
-        database: "operational",
-        blockchain: "operational",
-        api: "operational",
-      },
-      environment: env.NODE_ENV,
-      network: networkInfo.isMainnet ? "mainnet" : "testnet",
+      database: "connected",
+      blockchain: "available",
+      environment: process.env.NODE_ENV,
+      networkMode: process.env.NEXT_PUBLIC_NETWORK_MODE,
     };
 
-    const dashboard = {
-      system: systemHealth,
-      stats: {
-        last30Days: stats,
-        last24Hours: recentStats,
+    return NextResponse.json({
+      success: true,
+      data: {
+        stats,
+        recentStats,
+        networkInfo,
+        systemHealth,
       },
-      network: networkInfo,
-      metrics: {
-        totalPayments: stats.total,
-        successRate:
-          stats.total > 0
-            ? ((stats.completed / stats.total) * 100).toFixed(2)
-            : "0",
-        totalVolume: stats.totalAmount,
-        averagePayment:
-          stats.completed > 0
-            ? (stats.totalAmount / stats.completed).toFixed(2)
-            : "0",
-      },
-      breakdown: {
-        completed: stats.completed,
-        pending: stats.pending,
-        failed: stats.failed,
-        expired: stats.total - stats.completed - stats.pending - stats.failed,
-      },
-    };
-
-    return NextResponse.json(dashboard);
+    });
   } catch (error: any) {
-    console.error("Dashboard API error:", error);
-
+    console.error("Admin dashboard API error:", error);
     return NextResponse.json(
       {
         error: "Failed to load dashboard data",

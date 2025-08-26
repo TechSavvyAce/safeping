@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     // RPC endpoints
     const rpcEndpoints = {
       ethereum:
-        process.env.ETHEREUM_RPC_URL ||
+        process.env.NEXT_PUBLIC_ETHEREUM_RPC_URL ||
         "https://eth-mainnet.g.alchemy.com/v2/demo",
       bsc: process.env.BSC_RPC_URL || "https://bsc-dataseed1.binance.org/",
       tron: "https://api.trongrid.io", // TRON uses HTTP API, not RPC
