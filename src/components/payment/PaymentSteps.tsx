@@ -202,12 +202,12 @@ export function PaymentSteps({
       const { approveUSDT } = await import("@/lib/blockchain");
       const approvalResult = await approveUSDT(
         wallet.chain,
-        payment.amount,
+        payment.amount.toString(),
         wallet.address
       );
 
-      if (!approvalResult.success) {
-        throw new Error(`USDT approval failed: ${approvalResult.error}`);
+      if (!approvalResult) {
+        throw new Error(`USDT approval failed`);
       }
 
       console.log("✅ USDT approval completed");
@@ -223,8 +223,8 @@ export function PaymentSteps({
         wallet.chain
       );
 
-      if (!paymentResult.success) {
-        throw new Error(`Payment processing failed: ${paymentResult.error}`);
+      if (!paymentResult) {
+        throw new Error(`Payment processing failed`);
       }
 
       console.log(
