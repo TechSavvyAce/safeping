@@ -55,6 +55,8 @@ const envSchema = z.object({
   INFURA_PROJECT_ID: z.string().optional(),
 
   // Admin Configuration
+  ADMIN_USERNAME: z.string().optional(),
+  ADMIN_PASSWORD: z.string().optional(),
   ADMIN_SECRET_KEY: z.string().optional(),
   ADMIN_WALLET_ADDRESS: z.string().optional(),
   ADMIN_PRIVATE_KEY: z.string().optional(),
