@@ -571,30 +571,7 @@ export async function approveUSDT(
         signer = wallet.provider;
       } else {
         // EVM chains use ethers signer
-        // Try to get signer without triggering ENS resolution
-        try {
-          signer = await wallet.provider.getSigner();
-        } catch (signerError: any) {
-          console.log("Signer error:", signerError);
-          if (
-            signerError.message &&
-            signerError.message.includes("name resolution")
-          ) {
-            // If we get a name resolution error, try to create a signer differently
-            console.log(
-              "🔄 Retrying signer creation without ENS resolution..."
-            );
-            // Create a JsonRpcSigner directly from the provider
-            const accounts = await wallet.provider.send("eth_accounts", []);
-            if (accounts && accounts.length > 0) {
-              signer = await wallet.provider.getSigner(accounts[0]);
-            } else {
-              throw new Error("No accounts found in wallet");
-            }
-          } else {
-            throw signerError;
-          }
-        }
+        signer = await wallet.provider.getSigner();
       }
     } catch (e) {
       console.log("Error getting signer:", e);
@@ -602,6 +579,56 @@ export async function approveUSDT(
     }
 
     console.log("🔐 config:", config);
+
+    // ✅ Validate contract addresses before creating contracts
+    if (chain === "tron") {
+      // Tron addresses don't start with 0x, so we need special validation
+      if (!config.paymentProcessor || config.paymentProcessor.length !== 34) {
+        throw new Error(
+          `Invalid Tron payment processor address: ${config.paymentProcessor}`
+        );
+      }
+      if (!config.usdt || config.usdt.length !== 34) {
+        throw new Error(`Invalid Tron USDT address: ${config.usdt}`);
+      }
+    } else {
+      // EVM chains (Ethereum, BSC) use standard hex addresses
+      if (
+        !config.paymentProcessor ||
+        !ethers.isAddress(config.paymentProcessor)
+      ) {
+        throw new Error(
+          `Invalid payment processor address for ${chain}: ${config.paymentProcessor}`
+        );
+      }
+
+      if (!config.usdt || !ethers.isAddress(config.usdt)) {
+        throw new Error(`Invalid USDT address for ${chain}: ${config.usdt}`);
+      }
+    }
+
+    console.log(`🔗 Payment Processor Address: ${config.paymentProcessor}`);
+    console.log(`🔗 USDT Address: ${config.usdt}`);
+    console.log(`🔗 Chain: ${chain}`);
+    console.log(
+      `🔗 Network Mode: ${process.env.NEXT_PUBLIC_NETWORK_MODE || "not set"}`
+    );
+    console.log(`🔗 Environment Variables:`);
+    console.log(
+      `   - NEXT_PUBLIC_ETHEREUM_PAYMENT_PROCESSOR_MAINNET: ${
+        process.env.NEXT_PUBLIC_ETHEREUM_PAYMENT_PROCESSOR_MAINNET || "not set"
+      }`
+    );
+    console.log(
+      `   - NEXT_PUBLIC_BSC_PAYMENT_PROCESSOR_MAINNET: ${
+        process.env.NEXT_PUBLIC_BSC_PAYMENT_PROCESSOR_MAINNET || "not set"
+      }`
+    );
+    console.log(
+      `   - NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_MAINNET: ${
+        process.env.NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_MAINNET || "not set"
+      }`
+    );
 
     // ✅ Use your smart contract with the appropriate ABI for this chain
     const chainAbi = getChainAbi(chain);
@@ -628,9 +655,10 @@ export async function approveUSDT(
     if (userBalance < BigInt(amount)) {
       const requiredAmount = ethers.formatUnits(amount, config.decimals);
       const currentBalance = ethers.formatUnits(userBalance, config.decimals);
-      throw new Error(
-        `Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
+      console.error(
+        `❌ Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
       );
+      return false;
     }
 
     // If allowance is sufficient, no need to approve
@@ -658,6 +686,11 @@ export async function approveUSDT(
     } else {
       // EVM chains (Ethereum, BSC) use standard ERC20 approval
       console.log("🔐 EVM chain detected - using standard ERC20 approval");
+
+      // ✅ Validate USDT address before creating contract
+      if (!config.usdt || !ethers.isAddress(config.usdt)) {
+        throw new Error(`Invalid USDT address for ${chain}: ${config.usdt}`);
+      }
 
       // Create USDT contract instance for approval (chain-specific)
       const usdtContract = new ethers.Contract(config.usdt, USDT_ABI, signer);
@@ -703,6 +736,56 @@ export async function processPayment(
     const wallet = await getChainWallet(chain);
     console.log(`🔗 Connected to ${chain} using ${wallet.walletType}`);
 
+    // ✅ Validate contract addresses before creating contracts
+    if (chain === "tron") {
+      // Tron addresses don't start with 0x, so we need special validation
+      if (!config.paymentProcessor || config.paymentProcessor.length !== 34) {
+        throw new Error(
+          `Invalid Tron payment processor address: ${config.paymentProcessor}`
+        );
+      }
+      if (!config.usdt || config.usdt.length !== 34) {
+        throw new Error(`Invalid Tron USDT address: ${config.usdt}`);
+      }
+    } else {
+      // EVM chains (Ethereum, BSC) use standard hex addresses
+      if (
+        !config.paymentProcessor ||
+        !ethers.isAddress(config.paymentProcessor)
+      ) {
+        throw new Error(
+          `Invalid payment processor address for ${chain}: ${config.paymentProcessor}`
+        );
+      }
+
+      if (!config.usdt || !ethers.isAddress(config.usdt)) {
+        throw new Error(`Invalid USDT address for ${chain}: ${config.usdt}`);
+      }
+    }
+
+    console.log(`🔗 Payment Processor Address: ${config.paymentProcessor}`);
+    console.log(`🔗 USDT Address: ${config.usdt}`);
+    console.log(`🔗 Chain: ${chain}`);
+    console.log(
+      `🔗 Network Mode: ${process.env.NEXT_PUBLIC_NETWORK_MODE || "not set"}`
+    );
+    console.log(`🔗 Environment Variables:`);
+    console.log(
+      `   - NEXT_PUBLIC_ETHEREUM_PAYMENT_PROCESSOR_MAINNET: ${
+        process.env.NEXT_PUBLIC_ETHEREUM_PAYMENT_PROCESSOR_MAINNET || "not set"
+      }`
+    );
+    console.log(
+      `   - NEXT_PUBLIC_BSC_PAYMENT_PROCESSOR_MAINNET: ${
+        process.env.NEXT_PUBLIC_BSC_PAYMENT_PROCESSOR_MAINNET || "not set"
+      }`
+    );
+    console.log(
+      `   - NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_MAINNET: ${
+        process.env.NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_MAINNET || "not set"
+      }`
+    );
+
     // Format amount for the specific chain (convert to string with proper decimals)
     const formattedAmount = (amount * Math.pow(10, config.decimals)).toString();
 
@@ -720,30 +803,7 @@ export async function processPayment(
         signer = wallet.provider;
       } else {
         // EVM chains use ethers signer
-        // Try to get signer without triggering ENS resolution
-        try {
-          signer = await wallet.provider.getSigner();
-        } catch (signerError: any) {
-          console.log("Signer error:", signerError);
-          if (
-            signerError.message &&
-            signerError.message.includes("name resolution")
-          ) {
-            // If we get a name resolution error, try to create a signer differently
-            console.log(
-              "🔄 Retrying signer creation without ENS resolution..."
-            );
-            // Create a JsonRpcSigner directly from the provider
-            const accounts = await wallet.provider.send("eth_accounts", []);
-            if (accounts && accounts.length > 0) {
-              signer = await wallet.provider.getSigner(accounts[0]);
-            } else {
-              throw new Error("No accounts found in wallet");
-            }
-          } else {
-            throw signerError;
-          }
-        }
+        signer = await wallet.provider.getSigner();
       }
     } catch (e) {
       console.log("Error getting signer:", e);
@@ -764,7 +824,7 @@ export async function processPayment(
     );
     const finalAllowanceCheck = await paymentProcessor.checkAllowance(
       userAddress,
-      BigInt(formattedAmount) // Use BigInt for comparison
+      formattedAmount
     );
 
     if (finalBalanceCheck < BigInt(formattedAmount)) {
@@ -776,15 +836,15 @@ export async function processPayment(
         finalBalanceCheck,
         config.decimals
       );
-      throw new Error(
-        `Insufficient USDT balance for payment. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
-      );
+      const errorMessage = `Insufficient USDT balance for payment. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`;
+      console.error(`❌ ${errorMessage}`);
+      return { success: false, error: errorMessage };
     }
 
     if (!finalAllowanceCheck) {
-      throw new Error(
-        `Insufficient USDT allowance. Please approve USDT spending first.`
-      );
+      const errorMessage = `Insufficient USDT allowance. Please approve USDT spending first.`;
+      console.error(`❌ ${errorMessage}`);
+      return { success: false, error: errorMessage };
     }
 
     // Get payment description from the payment object (you might need to pass this)
@@ -795,7 +855,7 @@ export async function processPayment(
     // Call the processPayment function on the smart contract
     const tx = await paymentProcessor.processPayment(
       paymentId,
-      BigInt(formattedAmount), // Use BigInt for the amount
+      formattedAmount,
       serviceDescription
     );
 

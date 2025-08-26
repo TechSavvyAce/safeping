@@ -169,6 +169,9 @@ export function PaymentSteps({
 
       // Step 1: Approve USDT spending for the smart contract
       console.log("🔐 Step 1: Approving USDT spending...");
+      console.log(
+        `💰 Checking balance for ${payment.amount} USDT on ${wallet.chain}`
+      );
 
       try {
         const { approveUSDT } = await import("@/lib/blockchain");
@@ -178,8 +181,20 @@ export function PaymentSteps({
           wallet.address
         );
 
+        console.log(`🔐 Approval result:`, approvalResult);
+
         if (!approvalResult) {
-          throw new Error(`USDT approval failed`);
+          // Handle insufficient balance case
+          const errorMessage = `USDT余额不足！需要: ${payment.amount} USDT，当前余额不足。请确保您的钱包中有足够的USDT。`;
+          console.error("❌ USDT approval failed: Insufficient balance");
+
+          // Show alert to user
+          alert(`❌ USDT授权失败\n\n${errorMessage}`);
+
+          // Set error and stop processing
+          setError(errorMessage);
+          setApproving(false);
+          return;
         }
 
         console.log("✅ USDT approval completed");
@@ -247,6 +262,9 @@ export function PaymentSteps({
 
       // Step 2: Call smart contract to process payment
       console.log("💸 Step 2: Processing payment on smart contract...");
+      console.log(
+        `💳 Processing payment of ${payment.amount} USDT for ${payment.payment_id}`
+      );
       setApproving(false); // Approval completed
       setProcessing(true); // Start payment processing
 
@@ -261,8 +279,33 @@ export function PaymentSteps({
         wallet.chain
       );
 
-      if (!paymentResult) {
-        throw new Error(`Payment processing failed`);
+      if (!paymentResult || !paymentResult.success) {
+        const errorMessage =
+          paymentResult?.error || "Payment processing failed";
+        console.error("❌ Payment processing failed:", errorMessage);
+
+        // Show alert to user
+        alert(`❌ 支付失败\n\n${errorMessage}`);
+
+        // Set error and stop processing
+        setError(errorMessage);
+        setProcessing(false);
+        return;
+      }
+
+      // Verify we have a valid transaction hash
+      if (!paymentResult.txHash) {
+        const errorMessage =
+          "Payment completed but no transaction hash received";
+        console.error("❌ Payment processing failed:", errorMessage);
+
+        // Show alert to user
+        alert(`❌ 支付失败\n\n${errorMessage}`);
+
+        // Set error and stop processing
+        setError(errorMessage);
+        setProcessing(false);
+        return;
       }
 
       console.log(
