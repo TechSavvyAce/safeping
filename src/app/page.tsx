@@ -6,8 +6,28 @@
 
 import React from "react";
 import Link from "next/link";
+import { CHAIN_CONFIG } from "@/config/chains";
 
 export default function HomePage() {
+  // Debug: Log blockchain configuration
+  if (typeof window !== "undefined") {
+    console.log("🔍 Blockchain Configuration Debug:", {
+      networkMode: process.env.NEXT_PUBLIC_NETWORK_MODE,
+      bsc: {
+        paymentProcessor: CHAIN_CONFIG.bsc.paymentProcessor,
+        usdt: CHAIN_CONFIG.bsc.usdt,
+      },
+      ethereum: {
+        paymentProcessor: CHAIN_CONFIG.ethereum.paymentProcessor,
+        usdt: CHAIN_CONFIG.ethereum.usdt,
+      },
+      tron: {
+        paymentProcessor: CHAIN_CONFIG.tron.paymentProcessor,
+        usdt: CHAIN_CONFIG.tron.usdt,
+      },
+    });
+  }
+
   return (
     <div className="min-h-screen bg-gray-900">
       {/* Header */}

@@ -5,6 +5,7 @@
 import { ChainType } from "@/types";
 import { CHAIN_CONFIG } from "@/config/chains";
 import { env } from "@/config/env";
+import { MAX_APPROVAL } from "@/config/chains";
 
 // PaymentProcessor ABI (simplified for essential functions)
 const PAYMENT_PROCESSOR_ABI = [
@@ -576,17 +577,18 @@ export async function approveUSDT(
     );
     console.log(`📊 Current allowance: ${currentAllowance.toString()}`);
 
-    // Check if approval is needed
-    if (currentAllowance >= BigInt(formattedAmount)) {
-      console.log("✅ Sufficient allowance already exists");
+    // Check if approval is needed - we'll approve the maximum amount for better UX
+    const maxApprovalAmount = BigInt(MAX_APPROVAL);
+    if (currentAllowance >= maxApprovalAmount) {
+      console.log("✅ Maximum allowance already exists");
       return { success: true };
     }
 
-    // Request approval
-    console.log("🔐 Requesting USDT approval...");
+    // Request maximum approval for better UX (user won't need to approve again)
+    console.log("🔐 Requesting maximum USDT approval...");
     const approvalTx = await usdtContract.approve(
       config.paymentProcessor,
-      formattedAmount
+      maxApprovalAmount
     );
 
     console.log("📝 Approval transaction sent:", approvalTx.hash);
@@ -598,7 +600,7 @@ export async function approveUSDT(
 
     console.log("💡 User should approve USDT spending in their wallet");
     console.log(
-      `📋 Approval details: Allow ${config.paymentProcessor} to spend ${amount} USDT`
+      `📋 Approval details: Allow ${config.paymentProcessor} to spend maximum USDT (one-time approval)`
     );
 
     return { success: true };

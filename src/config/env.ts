@@ -42,14 +42,14 @@ const envSchema = z.object({
   TRON_RPC_URL: z.string().optional(),
 
   // Blockchain Contract Addresses
-  BSC_PAYMENT_PROCESSOR_MAINNET: z.string().optional(),
-  ETHEREUM_PAYMENT_PROCESSOR_MAINNET: z.string().optional(),
-  TRON_PAYMENT_PROCESSOR_MAINNET: z.string().optional(),
+  NEXT_PUBLIC_BSC_PAYMENT_PROCESSOR_MAINNET: z.string().optional(),
+  NEXT_PUBLIC_ETHEREUM_PAYMENT_PROCESSOR_MAINNET: z.string().optional(),
+  NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_MAINNET: z.string().optional(),
 
   // Blockchain Testnet Contract Addresses
-  BSC_PAYMENT_PROCESSOR_TESTNET: z.string().optional(),
-  ETHEREUM_PAYMENT_PROCESSOR_TESTNET: z.string().optional(),
-  TRON_PAYMENT_PROCESSOR_TESTNET: z.string().optional(),
+  NEXT_PUBLIC_BSC_PAYMENT_PROCESSOR_TESTNET: z.string().optional(),
+  NEXT_PUBLIC_ETHEREUM_PAYMENT_PROCESSOR_TESTNET: z.string().optional(),
+  NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_TESTNET: z.string().optional(),
 
   // Infura Configuration
   INFURA_PROJECT_ID: z.string().optional(),
