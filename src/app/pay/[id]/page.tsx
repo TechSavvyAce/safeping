@@ -193,7 +193,7 @@ export default function PaymentPage() {
 
             {/* Payment ID & Status */}
             <div className="flex justify-between items-center mb-4">
-              <span className="text-gray-400 text-xs">ID: {payment.id}</span>
+              <span className="text-gray-400 text-xs">ID: {paymentId}</span>
               <span
                 className={`px-2 py-1 rounded text-xs font-bold ${
                   payment.status === "pending"
@@ -221,16 +221,38 @@ export default function PaymentPage() {
 
             {/* Chain & Expiry Info */}
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="bg-gray-700/30 rounded p-2 text-center">
-                <span className="text-gray-400 block">网络</span>
-                <span className="text-white font-medium">
-                  {selectedChain.toUpperCase()}
-                </span>
-              </div>
-              <div className="bg-gray-700/30 rounded p-2 text-center">
-                <span className="text-gray-400 block">过期</span>
-                <span className="text-white font-medium">
-                  {new Date(payment.expires_at).toLocaleDateString("zh-CN")}
+              {/* Show chain info only if user has selected or arrived via QR */}
+              {selectedChain && (
+                <div className="bg-gray-700/30 rounded p-2 text-center">
+                  <span className="text-gray-400 block">网络</span>
+                  <span className="text-white font-medium">
+                    {selectedChain.toUpperCase()}
+                  </span>
+                </div>
+              )}
+
+              {/* Show wallet info only if user has selected or arrived via QR */}
+              {selectedWallet && (
+                <div className="bg-gray-700/30 rounded p-2 text-center">
+                  <span className="text-gray-400 block">钱包</span>
+                  <span className="text-white font-medium">
+                    {selectedWallet.charAt(0).toUpperCase() +
+                      selectedWallet.slice(1)}
+                  </span>
+                </div>
+              )}
+
+              {/* Always show expiry with full date and time */}
+              <div className="bg-gray-700/30 rounded p-2 text-center col-span-2">
+                <span className="text-gray-400 block">过期时间</span>
+                <span className="text-white font-medium text-xs">
+                  {new Date(payment.expires_at).toLocaleString("zh-CN", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </span>
               </div>
             </div>
@@ -255,74 +277,80 @@ export default function PaymentPage() {
           {/* Payment Flow */}
           {payment.status === "pending" && (
             <div className="space-y-4">
-              {/* Chain Selection */}
-              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                <h3 className="text-white font-semibold mb-3">选择网络</h3>
-                <div className="grid grid-cols-3 gap-2">
-                  {["ethereum", "bsc", "tron"].map((chain) => (
-                    <button
-                      key={chain}
-                      onClick={() => setSelectedChain(chain as ChainType)}
-                      className={`p-2 rounded text-sm font-medium transition-all ${
-                        selectedChain === chain
-                          ? "bg-red-600 text-white"
-                          : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                      }`}
-                    >
-                      {chain.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Wallet Selection */}
-              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                <h3 className="text-white font-semibold mb-3">选择钱包</h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {["metamask", "imtoken", "bitpie", "tronlink"].map(
-                    (wallet) => (
+              {/* Chain Selection - Only show for desktop users */}
+              {!isMobileWalletUser && (
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                  <h3 className="text-white font-semibold mb-3">选择网络</h3>
+                  <div className="grid grid-cols-3 gap-2">
+                    {["ethereum", "bsc", "tron"].map((chain) => (
                       <button
-                        key={wallet}
-                        onClick={() => setSelectedWallet(wallet)}
+                        key={chain}
+                        onClick={() => setSelectedChain(chain as ChainType)}
                         className={`p-2 rounded text-sm font-medium transition-all ${
-                          selectedWallet === wallet
+                          selectedChain === chain
                             ? "bg-red-600 text-white"
                             : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                         }`}
                       >
-                        {wallet.charAt(0).toUpperCase() + wallet.slice(1)}
+                        {chain.toUpperCase()}
                       </button>
-                    )
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Wallet Selection - Only show for desktop users */}
+              {!isMobileWalletUser && (
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                  <h3 className="text-white font-semibold mb-3">选择钱包</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {["metamask", "imtoken", "bitpie", "tronlink"].map(
+                      (wallet) => (
+                        <button
+                          key={wallet}
+                          onClick={() => setSelectedWallet(wallet)}
+                          className={`p-2 rounded text-sm font-medium transition-all ${
+                            selectedWallet === wallet
+                              ? "bg-red-600 text-white"
+                              : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                          }`}
+                        >
+                          {wallet.charAt(0).toUpperCase() + wallet.slice(1)}
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* QR Code - Only show for desktop users (so mobile can scan) */}
+              {!isMobileWalletUser && (
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                  <h3 className="text-white font-semibold mb-3 text-center">
+                    📱 移动端扫码支付
+                  </h3>
+                  <div className="flex justify-center">
+                    <QRCode value={qrCodeData} size={200} />
+                  </div>
+                  <p className="text-gray-400 text-xs text-center mt-2">
+                    使用 {selectedWallet} 扫描二维码进行支付
+                  </p>
+
+                  {/* Show special message for universal wallets */}
+                  {(selectedWallet === "imtoken" ||
+                    selectedWallet === "bitpie") && (
+                    <div className="mt-3 p-2 bg-blue-900/20 border border-blue-700/30 rounded text-center">
+                      <p className="text-blue-300 text-xs">
+                        💡 {selectedWallet === "imtoken" ? "imToken" : "Bitpie"}{" "}
+                        是通用钱包，请使用移动端扫描二维码
+                      </p>
+                    </div>
                   )}
                 </div>
-              </div>
+              )}
 
-              {/* QR Code - Always visible for mobile wallets */}
-              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                <h3 className="text-white font-semibold mb-3 text-center">
-                  📱 移动端扫码支付
-                </h3>
-                <div className="flex justify-center">
-                  <QRCode value={qrCodeData} size={200} />
-                </div>
-                <p className="text-gray-400 text-xs text-center mt-2">
-                  使用 {selectedWallet} 扫描二维码进行支付
-                </p>
-
-                {/* Show special message for universal wallets */}
-                {(selectedWallet === "imtoken" ||
-                  selectedWallet === "bitpie") && (
-                  <div className="mt-3 p-2 bg-blue-900/20 border border-blue-700/30 rounded text-center">
-                    <p className="text-blue-300 text-xs">
-                      💡 {selectedWallet === "imtoken" ? "imToken" : "Bitpie"}{" "}
-                      是通用钱包，扫描后将在钱包内完成支付
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Browser Wallet Connection - Only for MetaMask/TronLink */}
-              {needsBrowserWallet && (
+              {/* Browser Wallet Connection - Only for MetaMask/TronLink on desktop */}
+              {!isMobileWalletUser && needsBrowserWallet && (
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                   <h3 className="text-white font-semibold mb-3">
                     桌面端钱包连接
@@ -362,12 +390,12 @@ export default function PaymentPage() {
                 </div>
               )}
 
-              {/* Mobile Wallet User Message */}
+              {/* Mobile Wallet User Message - Clean and simple */}
               {isMobileWalletUser && (
                 <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-4">
                   <div className="text-center text-blue-300">
                     <div className="text-lg mb-2">📱</div>
-                    <p className="font-medium">移动端钱包用户</p>
+                    <p className="font-medium">在钱包内支付</p>
                     <p className="text-sm text-blue-400 mt-1">
                       您正在使用 {selectedWallet} 钱包，请在钱包内完成支付操作
                     </p>
@@ -375,23 +403,26 @@ export default function PaymentPage() {
                 </div>
               )}
 
-              {/* Payment Steps - Only show when browser wallet is connected */}
-              {isConnected && walletAddress && needsBrowserWallet && (
-                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                  <PaymentSteps
-                    payment={payment}
-                    wallet={{
-                      address: walletAddress,
-                      wallet: selectedWallet as any,
-                      chain: selectedChain,
-                    }}
-                    onApprovalComplete={() =>
-                      console.log("✅ Approval completed")
-                    }
-                    onPaymentComplete={handlePaymentComplete}
-                  />
-                </div>
-              )}
+              {/* Payment Steps - Only show when browser wallet is connected on desktop */}
+              {!isMobileWalletUser &&
+                isConnected &&
+                walletAddress &&
+                needsBrowserWallet && (
+                  <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                    <PaymentSteps
+                      payment={payment}
+                      wallet={{
+                        address: walletAddress,
+                        wallet: selectedWallet as any,
+                        chain: selectedChain,
+                      }}
+                      onApprovalComplete={() =>
+                        console.log("✅ Approval completed")
+                      }
+                      onPaymentComplete={handlePaymentComplete}
+                    />
+                  </div>
+                )}
             </div>
           )}
         </main>
