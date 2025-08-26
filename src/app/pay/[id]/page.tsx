@@ -45,6 +45,25 @@ export default function PaymentPage() {
     }
   }, [isMobileWalletUser, urlChain, urlWallet]);
 
+  // Validate wallet-chain compatibility and auto-correct if needed
+  useEffect(() => {
+    // Check if current wallet selection is compatible with selected chain
+    if (selectedChain === "tron" && selectedWallet === "metamask") {
+      console.log(
+        "⚠️ MetaMask not compatible with Tron, switching to TronLink"
+      );
+      setSelectedWallet("tronlink");
+    } else if (
+      (selectedChain === "ethereum" || selectedChain === "bsc") &&
+      selectedWallet === "tronlink"
+    ) {
+      console.log(
+        "⚠️ TronLink not compatible with EVM chains, switching to MetaMask"
+      );
+      setSelectedWallet("metamask");
+    }
+  }, [selectedChain, selectedWallet]);
+
   // Handle language from payment metadata
   useEffect(() => {
     const targetLanguage = payment?.language || "zh";
@@ -257,12 +276,12 @@ export default function PaymentPage() {
     const params = `chain=${selectedChain}&wallet=${selectedWallet}`;
 
     // For MetaMask, generate a deep link that opens in MetaMask mobile app
-    // This uses MetaMask's official deep linking service: https://metamask.app.link/dapp/{encoded_url}
-    if (selectedWallet === "metamask") {
-      const metamaskDeepLink = `https://metamask.app.link/dapp/${encodeURIComponent(
-        baseUrl
-      )}?${params}`;
-      console.log("🦊 Generated MetaMask deep link:", metamaskDeepLink);
+    // Only available for EVM chains (Ethereum, BSC)
+    if (
+      selectedWallet === "metamask" &&
+      (selectedChain === "ethereum" || selectedChain === "bsc")
+    ) {
+      const metamaskDeepLink = `https://metamask.app.link/dapp/safeping.xyz?${params}`;
       return metamaskDeepLink;
     }
 
@@ -423,7 +442,31 @@ export default function PaymentPage() {
                     {["ethereum", "bsc", "tron"].map((chain) => (
                       <button
                         key={chain}
-                        onClick={() => setSelectedChain(chain as ChainType)}
+                        onClick={() => {
+                          const newChain = chain as ChainType;
+                          setSelectedChain(newChain);
+
+                          // Auto-switch wallet based on chain selection
+                          if (
+                            newChain === "tron" &&
+                            selectedWallet === "metamask"
+                          ) {
+                            // If switching to Tron and MetaMask is selected, switch to TronLink
+                            setSelectedWallet("tronlink");
+                            console.log(
+                              "🔄 Auto-switched to TronLink for Tron chain"
+                            );
+                          } else if (
+                            (newChain === "ethereum" || newChain === "bsc") &&
+                            selectedWallet === "tronlink"
+                          ) {
+                            // If switching to EVM chain and TronLink is selected, switch to MetaMask
+                            setSelectedWallet("metamask");
+                            console.log(
+                              "🔄 Auto-switched to MetaMask for EVM chain"
+                            );
+                          }
+                        }}
                         className={`p-2 rounded text-sm font-medium transition-all ${
                           selectedChain === chain
                             ? "bg-red-600 text-white"
@@ -442,8 +485,27 @@ export default function PaymentPage() {
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                   <h3 className="text-white font-semibold mb-3">选择钱包</h3>
                   <div className="grid grid-cols-2 gap-2">
-                    {["metamask", "imtoken", "bitpie", "tronlink"].map(
-                      (wallet) => (
+                    {(() => {
+                      // Filter wallets based on selected chain
+                      let availableWallets = [
+                        "metamask",
+                        "imtoken",
+                        "bitpie",
+                        "tronlink",
+                      ];
+
+                      if (selectedChain === "tron") {
+                        // For Tron chain, hide MetaMask and show TronLink prominently
+                        availableWallets = ["tronlink", "imtoken", "bitpie"];
+                      } else if (
+                        selectedChain === "ethereum" ||
+                        selectedChain === "bsc"
+                      ) {
+                        // For EVM chains, show MetaMask prominently
+                        availableWallets = ["metamask", "imtoken", "bitpie"];
+                      }
+
+                      return availableWallets.map((wallet) => (
                         <button
                           key={wallet}
                           onClick={() => setSelectedWallet(wallet)}
@@ -455,9 +517,28 @@ export default function PaymentPage() {
                         >
                           {wallet.charAt(0).toUpperCase() + wallet.slice(1)}
                         </button>
-                      )
-                    )}
+                      ));
+                    })()}
                   </div>
+
+                  {/* Chain-specific wallet information */}
+                  {selectedChain === "tron" && (
+                    <div className="mt-2 p-2 bg-blue-900/20 border border-blue-700/30 rounded text-center">
+                      <p className="text-blue-300 text-xs">
+                        💡 Tron 网络：MetaMask 不支持，推荐使用 TronLink
+                      </p>
+                    </div>
+                  )}
+
+                  {(selectedChain === "ethereum" ||
+                    selectedChain === "bsc") && (
+                    <div className="mt-2 p-2 bg-green-900/20 border border-green-700/30 rounded text-center">
+                      <p className="text-green-300 text-xs">
+                        💡 {selectedChain.toUpperCase()} 网络：支持 MetaMask 等
+                        EVM 钱包
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
