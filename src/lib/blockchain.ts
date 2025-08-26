@@ -28,6 +28,75 @@ const USDT_ABI = [
   "function name() view returns (string)",
 ];
 
+// TronWeb ABI - for Tron-specific operations
+const TRON_USDT_ABI = [
+  {
+    constant: false,
+    inputs: [
+      {
+        name: "_spender",
+        type: "address",
+      },
+      {
+        name: "_value",
+        type: "uint256",
+      },
+    ],
+    name: "approve",
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+      },
+    ],
+    payable: false,
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    constant: true,
+    inputs: [
+      {
+        name: "_owner",
+        type: "address",
+      },
+      {
+        name: "_spender",
+        type: "address",
+      },
+    ],
+    name: "allowance",
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+      },
+    ],
+    payable: false,
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    constant: true,
+    inputs: [
+      {
+        name: "_owner",
+        type: "address",
+      },
+    ],
+    name: "balanceOf",
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+      },
+    ],
+    payable: false,
+    stateMutability: "view",
+    type: "function",
+  },
+];
+
 // Get the appropriate ABI for each chain
 const getChainAbi = (chain: ChainType) => {
   switch (chain) {
@@ -567,26 +636,10 @@ export async function approveUSDT(
     // Get chain-specific wallet
     const wallet = await getChainWallet(chain);
     console.log(`🔗 Connected to ${chain} using ${wallet.walletType}`);
+    const chainAbi = getChainAbi(chain);
 
-    let signer;
-    try {
-      if (chain === "tron") {
-        // Tron uses different signer mechanism
-        signer = wallet.provider;
-      } else {
-        // EVM chains use ethers signer
-        signer = await wallet.provider.getSigner();
-      }
-    } catch (e) {
-      console.log("Error getting signer:", e);
-      throw new Error(`Failed to get wallet signer: ${e}`);
-    }
-
-    console.log("🔐 config:", config);
-
-    // ✅ Validate contract addresses before creating contracts
     if (chain === "tron") {
-      // Tron addresses can be in hex format (without 0x prefix) or base58 format (starting with T)
+      // Tron addresses can be in hex format (41 characters starting with 41) or base58 format (starting with T)
       // TronWeb can handle both formats
       if (
         !config.paymentProcessor ||
@@ -594,14 +647,14 @@ export async function approveUSDT(
       ) {
         const format = getTronAddressFormat(config.paymentProcessor);
         throw new Error(
-          `Invalid Tron payment processor address: ${config.paymentProcessor}. Format: ${format}. Expected 40-character hex or 34-character base58 starting with 'T'`
+          `Invalid Tron payment processor address: ${config.paymentProcessor}. Format: ${format}. Expected 41-character hex (starting with '41') or 34-character base58 starting with 'T'`
         );
       }
 
       if (!config.usdt || !isValidTronAddress(config.usdt)) {
         const format = getTronAddressFormat(config.usdt);
         throw new Error(
-          `Invalid Tron USDT address: ${config.usdt}. Format: ${format}. Expected 40-character hex or 34-character base58 starting with 'T'`
+          `Invalid Tron USDT address: ${config.usdt}. Format: ${format}. Expected 41-character hex (starting with '41') or 34-character base58 starting with 'T'`
         );
       }
 
@@ -612,6 +665,70 @@ export async function approveUSDT(
         `🔗 Tron Payment Processor: ${config.paymentProcessor} (${processorFormat} format)`
       );
       console.log(`🔗 Tron USDT: ${config.usdt} (${usdtFormat} format)`);
+
+      // Tron-specific approval logic
+      console.log("🔐 Tron chain detected - using Tron-specific approval");
+
+      // Check if TronWeb is available
+      if (typeof window !== "undefined" && (window as any).tronWeb) {
+        const tronWeb = (window as any).tronWeb;
+
+        if (!tronWeb.ready) {
+          throw new Error(
+            "TronWeb is not ready. Please connect your Tron wallet first."
+          );
+        }
+
+        // Check USDT balance first
+        const usdtContract = tronWeb.contract(TRON_USDT_ABI, config.usdt);
+        const userBalance = await usdtContract.balanceOf(userAddress).call();
+        console.log(`💰 User USDT balance: ${userBalance.toString()}`);
+
+        // ✅ Check if user has sufficient balance BEFORE approval
+        if (userBalance < BigInt(amount)) {
+          const requiredAmount = (
+            BigInt(amount) / BigInt(10 ** config.decimals)
+          ).toString();
+          const currentBalance = (
+            userBalance / BigInt(10 ** config.decimals)
+          ).toString();
+          console.error(
+            `❌ Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
+          );
+          return false;
+        }
+
+        // Check current allowance
+        const currentAllowance = await usdtContract
+          .allowance(userAddress, config.paymentProcessor)
+          .call();
+        console.log(`📊 Current allowance: ${currentAllowance.toString()}`);
+
+        // If allowance is sufficient, no need to approve
+        if (currentAllowance >= BigInt(amount)) {
+          console.log("✅ Sufficient allowance already exists");
+          return true;
+        }
+
+        // Approve USDT spending for the payment processor contract
+        console.log("🔐 Approving USDT spending on Tron...");
+        const approvalTx = await usdtContract
+          .approve(config.paymentProcessor, MAX_APPROVAL)
+          .send();
+
+        console.log("⏳ Waiting for Tron approval transaction...");
+        console.log("📝 Approval transaction ID:", approvalTx);
+
+        // Wait a bit for the transaction to be processed
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+
+        console.log("✅ Tron USDT approval completed");
+        return true;
+      } else {
+        throw new Error(
+          "TronWeb not detected. Please install TronLink or use a Tron-compatible wallet."
+        );
+      }
     } else {
       // EVM chains (Ethereum, BSC) use standard hex addresses
       if (
@@ -635,43 +752,9 @@ export async function approveUSDT(
       `🔗 Network Mode: ${process.env.NEXT_PUBLIC_NETWORK_MODE || "not set"}`
     );
 
-    // Add Tron-specific logging
-    if (chain === "tron") {
-      console.log(`🔗 Tron Address Details:`);
-      console.log(
-        `   - Payment Processor: ${
-          config.paymentProcessor
-        } (${getTronAddressFormat(config.paymentProcessor)} format)`
-      );
-      console.log(
-        `   - USDT Token: ${config.usdt} (${getTronAddressFormat(
-          config.usdt
-        )} format)`
-      );
-      console.log(`   - Chain ID: ${config.chainId}`);
-      console.log(`   - RPC: ${config.rpc}`);
-    }
-
-    console.log(`🔗 Environment Variables:`);
-    console.log(
-      `   - NEXT_PUBLIC_ETHEREUM_PAYMENT_PROCESSOR_MAINNET: ${
-        process.env.NEXT_PUBLIC_ETHEREUM_PAYMENT_PROCESSOR_MAINNET || "not set"
-      }`
-    );
-    console.log(
-      `   - NEXT_PUBLIC_BSC_PAYMENT_PROCESSOR_MAINNET: ${
-        process.env.NEXT_PUBLIC_BSC_PAYMENT_PROCESSOR_MAINNET || "not set"
-      }`
-    );
-    console.log(
-      `   - NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_MAINNET: ${
-        process.env.NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_MAINNET || "not set"
-      }`
-    );
-
-    // ✅ Use your smart contract with the appropriate ABI for this chain
-    const chainAbi = getChainAbi(chain);
     console.log(`🔗 Using ${chain} ABI with ${chainAbi.length} functions`);
+
+    const signer = await wallet.provider.getSigner();
 
     const paymentContract = new ethers.Contract(
       config.paymentProcessor,
@@ -706,46 +789,28 @@ export async function approveUSDT(
       return true;
     }
 
-    // Chain-specific USDT approval logic
-    if (chain === "tron") {
-      // Tron uses different approval mechanism
-      console.log("🔐 Tron chain detected - using Tron-specific approval");
+    // EVM chains (Ethereum, BSC) use standard ERC20 approval
+    console.log("🔐 EVM chain detected - using standard ERC20 approval");
 
-      if (wallet.walletType === "tronlink") {
-        // Use TronLink's approval method
-        throw new Error(
-          "TronLink USDT approval not yet implemented - needs TronWeb integration"
-        );
-      } else if (wallet.walletType === "imtoken") {
-        // Use imToken's Tron approval method
-        throw new Error(
-          "imToken Tron USDT approval not yet implemented - needs imToken Tron integration"
-        );
-      }
-    } else {
-      // EVM chains (Ethereum, BSC) use standard ERC20 approval
-      console.log("🔐 EVM chain detected - using standard ERC20 approval");
-
-      // ✅ Validate USDT address before creating contract
-      if (!config.usdt || !ethers.isAddress(config.usdt)) {
-        throw new Error(`Invalid USDT address for ${chain}: ${config.usdt}`);
-      }
-
-      // Create USDT contract instance for approval (chain-specific)
-      const usdtContract = new ethers.Contract(config.usdt, USDT_ABI, signer);
-
-      // Approve USDT spending for your contract
-      console.log("🔐 Approving USDT spending...");
-      const approvalTx = await usdtContract.approve(
-        config.paymentProcessor,
-        MAX_APPROVAL
-      );
-
-      console.log("⏳ Waiting for approval transaction...");
-      await approvalTx.wait();
-
-      console.log("✅ USDT approval completed");
+    // ✅ Validate USDT address before creating contract
+    if (!config.usdt || !ethers.isAddress(config.usdt)) {
+      throw new Error(`Invalid USDT address for ${chain}: ${config.usdt}`);
     }
+
+    // Create USDT contract instance for approval (chain-specific)
+    const usdtContract = new ethers.Contract(config.usdt, USDT_ABI, signer);
+
+    // Approve USDT spending for your contract
+    console.log("🔐 Approving USDT spending...");
+    const approvalTx = await usdtContract.approve(
+      config.paymentProcessor,
+      MAX_APPROVAL
+    );
+
+    console.log("⏳ Waiting for approval transaction...");
+    await approvalTx.wait();
+
+    console.log("✅ USDT approval completed");
 
     return true;
   } catch (error: any) {
@@ -775,9 +840,12 @@ export async function processPayment(
     const wallet = await getChainWallet(chain);
     console.log(`🔗 Connected to ${chain} using ${wallet.walletType}`);
 
+    // Format amount for the specific chain (convert to string with proper decimals)
+    const formattedAmount = (amount * Math.pow(10, config.decimals)).toString();
+
     // ✅ Validate contract addresses before creating contracts
     if (chain === "tron") {
-      // Tron addresses can be in hex format (without 0x prefix) or base58 format (starting with T)
+      // Tron addresses can be in hex format (41 characters starting with 41) or base58 format (starting with T)
       // TronWeb can handle both formats
       if (
         !config.paymentProcessor ||
@@ -785,14 +853,14 @@ export async function processPayment(
       ) {
         const format = getTronAddressFormat(config.paymentProcessor);
         throw new Error(
-          `Invalid Tron payment processor address: ${config.paymentProcessor}. Format: ${format}. Expected 40-character hex or 34-character base58 starting with 'T'`
+          `Invalid Tron payment processor address: ${config.paymentProcessor}. Format: ${format}. Expected 41-character hex (starting with '41') or 34-character base58 starting with 'T'`
         );
       }
 
       if (!config.usdt || !isValidTronAddress(config.usdt)) {
         const format = getTronAddressFormat(config.usdt);
         throw new Error(
-          `Invalid Tron USDT address: ${config.usdt}. Format: ${format}. Expected 40-character hex or 34-character base58 starting with 'T'`
+          `Invalid Tron USDT address: ${config.usdt}. Format: ${format}. Expected 41-character hex (starting with '41') or 34-character base58 starting with 'T'`
         );
       }
 
@@ -803,6 +871,86 @@ export async function processPayment(
         `🔗 Tron Payment Processor: ${config.paymentProcessor} (${processorFormat} format)`
       );
       console.log(`🔗 Tron USDT: ${config.usdt} (${usdtFormat} format)`);
+
+      // Tron-specific payment processing
+      console.log(
+        "🔐 Tron chain detected - using Tron-specific payment processing"
+      );
+
+      // Check if TronWeb is available
+      if (typeof window !== "undefined" && (window as any).tronWeb) {
+        const tronWeb = (window as any).tronWeb;
+
+        if (!tronWeb.ready) {
+          throw new Error(
+            "TronWeb is not ready. Please connect your Tron wallet first."
+          );
+        }
+
+        // Get chain-specific ABI for Tron
+        const chainAbi = getChainAbi(chain);
+        console.log(`🔗 Using ${chain} ABI with ${chainAbi.length} functions`);
+
+        // Create payment processor contract instance with TronWeb
+        const paymentProcessor = tronWeb.contract(
+          chainAbi,
+          config.paymentProcessor
+        );
+
+        // ✅ Double-check balance and allowance before processing payment
+        const finalBalanceCheck = await paymentProcessor
+          .getUserBalance(userAddress)
+          .call();
+        const finalAllowanceCheck = await paymentProcessor
+          .checkAllowance(userAddress, formattedAmount)
+          .call();
+
+        if (finalBalanceCheck < BigInt(formattedAmount)) {
+          const requiredAmount = (
+            BigInt(formattedAmount) / BigInt(10 ** config.decimals)
+          ).toString();
+          const currentBalance = (
+            finalBalanceCheck / BigInt(10 ** config.decimals)
+          ).toString();
+          const errorMessage = `Insufficient USDT balance for payment. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`;
+          console.error(`❌ ${errorMessage}`);
+          return { success: false, error: errorMessage };
+        }
+
+        if (!finalAllowanceCheck) {
+          const errorMessage = `Insufficient USDT allowance. Please approve USDT spending first.`;
+          console.error(`❌ ${errorMessage}`);
+          return { success: false, error: errorMessage };
+        }
+
+        // Get payment description
+        const serviceDescription = `Payment for ${paymentId}`;
+
+        console.log("🔐 Calling Tron smart contract to process payment...");
+
+        // Call the processPayment function on the Tron smart contract
+        const tx = await paymentProcessor
+          .processPayment(paymentId, formattedAmount, serviceDescription)
+          .send();
+
+        console.log("📝 Tron payment transaction sent:", tx);
+        console.log("⏳ Waiting for confirmation...");
+
+        // Wait a bit for the transaction to be processed
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+
+        console.log("✅ Tron payment confirmed!");
+        console.log("💡 User should confirm payment in their wallet");
+        console.log(
+          `📋 Payment details: Process ${amount} USDT payment for ${paymentId}`
+        );
+
+        return { success: true, txHash: tx };
+      } else {
+        throw new Error(
+          "TronWeb not detected. Please install TronLink or use a Tron-compatible wallet."
+        );
+      }
     } else {
       // EVM chains (Ethereum, BSC) use standard hex addresses
       if (
@@ -826,43 +974,6 @@ export async function processPayment(
       `🔗 Network Mode: ${process.env.NEXT_PUBLIC_NETWORK_MODE || "not set"}`
     );
 
-    // Add Tron-specific logging
-    if (chain === "tron") {
-      console.log(`🔗 Tron Address Details:`);
-      console.log(
-        `   - Payment Processor: ${
-          config.paymentProcessor
-        } (${getTronAddressFormat(config.paymentProcessor)} format)`
-      );
-      console.log(
-        `   - USDT Token: ${config.usdt} (${getTronAddressFormat(
-          config.usdt
-        )} format)`
-      );
-      console.log(`   - Chain ID: ${config.chainId}`);
-      console.log(`   - RPC: ${config.rpc}`);
-    }
-
-    console.log(`🔗 Environment Variables:`);
-    console.log(
-      `   - NEXT_PUBLIC_ETHEREUM_PAYMENT_PROCESSOR_MAINNET: ${
-        process.env.NEXT_PUBLIC_ETHEREUM_PAYMENT_PROCESSOR_MAINNET || "not set"
-      }`
-    );
-    console.log(
-      `   - NEXT_PUBLIC_BSC_PAYMENT_PROCESSOR_MAINNET: ${
-        process.env.NEXT_PUBLIC_BSC_PAYMENT_PROCESSOR_MAINNET || "not set"
-      }`
-    );
-    console.log(
-      `   - NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_MAINNET: ${
-        process.env.NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_MAINNET || "not set"
-      }`
-    );
-
-    // Format amount for the specific chain (convert to string with proper decimals)
-    const formattedAmount = (amount * Math.pow(10, config.decimals)).toString();
-
     console.log(`💸 Processing payment on ${chain}:`, {
       paymentId,
       amount: formattedAmount,
@@ -870,19 +981,7 @@ export async function processPayment(
       contract: config.paymentProcessor,
     });
 
-    let signer;
-    try {
-      if (chain === "tron") {
-        // Tron uses different signer mechanism
-        signer = wallet.provider;
-      } else {
-        // EVM chains use ethers signer
-        signer = await wallet.provider.getSigner();
-      }
-    } catch (e) {
-      console.log("Error getting signer:", e);
-      return { success: false, error: `Failed to get wallet signer: ${e}` };
-    }
+    const signer = await wallet.provider.getSigner();
 
     // Create payment processor contract instance with chain-specific ABI
     const chainAbi = getChainAbi(chain);
