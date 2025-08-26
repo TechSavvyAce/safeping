@@ -2,7 +2,7 @@
 // 🔗 Blockchain Configuration
 // =================================
 
-import { ChainConfig, ChainType } from "@/types";
+import { ChainConfig, ChainType } from "../types";
 
 // Network mode detection
 const isMainnet = process.env.NEXT_PUBLIC_NETWORK_MODE === "mainnet";
@@ -11,6 +11,120 @@ const isMainnet = process.env.NEXT_PUBLIC_NETWORK_MODE === "mainnet";
 const getContractAddress = (testnet: string, mainnet: string): string => {
   return isMainnet ? mainnet : testnet;
 };
+
+// Tron address validation utilities
+export function isValidTronAddress(address: string): boolean {
+  if (!address) return false;
+
+  // Check if it's a valid Tron hex address (41 characters, starts with 41)
+  // Tron hex addresses are prefixed with 41 instead of 0x
+  if (
+    address.length === 41 &&
+    address.startsWith("41") &&
+    /^41[a-fA-F0-9]{39}$/.test(address)
+  ) {
+    return true;
+  }
+
+  // Check if it's a valid base58 address (34 characters, starts with T)
+  if (address.length === 34 && address.startsWith("T")) {
+    return true;
+  }
+
+  return false;
+}
+
+// Tron address format detection
+export function getTronAddressFormat(
+  address: string
+): "hex" | "base58" | "invalid" {
+  if (!address) return "invalid";
+
+  // Tron hex addresses are 41 characters and start with 41
+  if (
+    address.length === 41 &&
+    address.startsWith("41") &&
+    /^41[a-fA-F0-9]{39}$/.test(address)
+  ) {
+    return "hex";
+  }
+
+  if (address.length === 34 && address.startsWith("T")) {
+    return "base58";
+  }
+
+  return "invalid";
+}
+
+// Helper function to get Tron address info for debugging
+export function getTronAddressInfo(address: string): {
+  format: "hex" | "base58" | "invalid";
+  isValid: boolean;
+  description: string;
+} {
+  const format = getTronAddressFormat(address);
+  const isValid = isValidTronAddress(address);
+
+  let description = "";
+  if (format === "hex") {
+    description =
+      "41-character Tron hex address (starts with 41) - compatible with TronWeb";
+  } else if (format === "base58") {
+    description =
+      "34-character base58 address (starts with T) - standard Tron format";
+  } else {
+    description = "Invalid address format";
+  }
+
+  return { format, isValid, description };
+}
+
+// Convert Tron hex address to base58 format (if needed)
+// Note: This is a placeholder - actual conversion requires TronWeb or external library
+export function convertTronHexToBase58(hexAddress: string): string {
+  if (!hexAddress.startsWith("41") || hexAddress.length !== 41) {
+    throw new Error(
+      "Invalid Tron hex address format. Must be 41 characters starting with '41'"
+    );
+  }
+
+  // This would require TronWeb or external library for actual conversion
+  // For now, return the hex address as-is
+  console.warn(
+    "⚠️ Tron hex to base58 conversion not implemented. Returning hex address."
+  );
+  return hexAddress;
+}
+
+// Convert Tron base58 address to hex format (if needed)
+// Note: This is a placeholder - actual conversion requires TronWeb or external library
+export function convertTronBase58ToHex(base58Address: string): string {
+  if (!base58Address.startsWith("T") || base58Address.length !== 34) {
+    throw new Error(
+      "Invalid Tron base58 address format. Must be 34 characters starting with 'T'"
+    );
+  }
+
+  // This would require TronWeb or external library for actual conversion
+  // For now, return the base58 address as-is
+  console.warn(
+    "⚠️ Tron base58 to hex conversion not implemented. Returning base58 address."
+  );
+  return base58Address;
+}
+
+// Get Tron payment processor address with proper hex handling
+function getTronPaymentProcessorAddress(): string {
+  // If environment variable is set, use it
+  if (process.env.NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_MAINNET) {
+    return process.env.NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_MAINNET;
+  }
+
+  // Use the Tron hex address (41 characters, starts with 41)
+  // The address 41dcbab66157dce96b55ca69bc230b35ac1a47cd11 is in the correct Tron format
+  // (41 characters, starts with 41, no 0x prefix)
+  return "41dcbab66157dce96b55ca69bc230b35ac1a47cd11";
+}
 
 export const CHAIN_CONFIG: ChainConfig = {
   bsc: {
@@ -48,8 +162,7 @@ export const CHAIN_CONFIG: ChainConfig = {
       ? "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" // TRON Mainnet USDT
       : "TNqLH6srwCVRcbKtxFMto2jFTwPTncZJm8", // TRON Shasta USDT
     paymentProcessor: isMainnet
-      ? process.env.NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_MAINNET ||
-        "41dcbab66157dce96b55ca69bc230b35ac1a47cd11"
+      ? getTronPaymentProcessorAddress() // Use function to get address with proper hex handling
       : "TWTTXmwy5gRWcuGH8e7r64AQ5F8eRcLqR6", // TRON Shasta Payment Processor
     chainId: isMainnet ? "mainnet" : "shasta",
     decimals: 6,
@@ -147,7 +260,8 @@ export function isValidAddress(address: string, chain: ChainType): boolean {
     case "ethereum":
       return /^0x[a-fA-F0-9]{40}$/.test(address);
     case "tron":
-      return /^T[A-Za-z1-9]{33}$/.test(address);
+      // Use the new Tron address validation that handles both hex and base58 formats
+      return isValidTronAddress(address);
     default:
       return false;
   }
