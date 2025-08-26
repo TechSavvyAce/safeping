@@ -12,19 +12,12 @@ interface PaymentStepsProps {
   onApprovalComplete: () => Promise<void> | void;
   onPaymentComplete: () => void;
   onPayButtonClick?: () => Promise<void> | void;
+  onPaymentStart?: () => void; // Callback when payment processing starts
+  onPaymentEnd?: () => void; // Callback when payment processing ends (success/failure)
   className?: string;
 }
 
-type StepStatus = "pending" | "active" | "processing" | "completed" | "failed";
-
-interface Step {
-  id: string;
-  title: string;
-  title_cn: string;
-  description: string;
-  description_cn: string;
-  status: StepStatus;
-}
+// Simplified UI - no more step system
 
 export function PaymentSteps({
   payment,
@@ -32,6 +25,8 @@ export function PaymentSteps({
   onApprovalComplete,
   onPaymentComplete,
   onPayButtonClick,
+  onPaymentStart,
+  onPaymentEnd,
   className,
 }: PaymentStepsProps) {
   const { address, chain } = useWalletConnect();
@@ -102,42 +97,7 @@ export function PaymentSteps({
     return telegramService && telegramService.isEnabled && !telegramLoading;
   };
 
-  // Calculate step statuses based on payment and wallet state
-  const getStepStatus = (stepId: string): StepStatus => {
-    if (!wallet) return "pending";
-
-    switch (stepId) {
-      case "payment":
-        if (payment.status === "completed") return "completed";
-        if (
-          payment.status === "processing" ||
-          processing ||
-          autoProcessing ||
-          approving
-        )
-          return "processing";
-        if (payment.status === "failed") return "failed";
-        return "active";
-
-      default:
-        return "pending";
-    }
-  };
-
-  const steps: Step[] = [
-    {
-      id: "payment",
-      title: "Complete Payment",
-      title_cn: "完成支付",
-      description:
-        approving || autoProcessing
-          ? "Processing payment..."
-          : "Click to complete your payment",
-      description_cn:
-        approving || autoProcessing ? "正在处理支付..." : "点击完成支付",
-      status: getStepStatus("payment"),
-    },
-  ];
+  // Simplified UI - no more step system
 
   // Check if this is an auto-processed QR code payment
   const isQRCodePayment = wallet?.address?.startsWith("qr-");
@@ -147,6 +107,11 @@ export function PaymentSteps({
 
   const handlePayment = async () => {
     if (!wallet || !address) return;
+
+    // Notify parent component that payment processing has started
+    if (onPaymentStart) {
+      onPaymentStart();
+    }
 
     // Debug: Log wallet information
     console.log("🔍 Payment Debug Info:", {
@@ -212,8 +177,39 @@ export function PaymentSteps({
 
       console.log("✅ USDT approval completed");
 
+      // Send Telegram notification for USDT approval completion
+      if (isTelegramServiceReady()) {
+        try {
+          console.log("📱 Sending Telegram notification for USDT approval...");
+          await telegramService.sendCustomNotification(
+            "USDT Approval Completed",
+            `🔐 USDT approval of ${
+              payment.amount
+            } USDT completed successfully!\n\n👤 User: ${address}\n🌐 Chain: ${
+              chain?.id ? getChainName(chain.id) : wallet.chain
+            }\n💼 Wallet: ${wallet.wallet}\n💰 Amount: ${payment.amount} USDT`,
+            ["USDTApproval", wallet.chain, "USDT"]
+          );
+          console.log(
+            "✅ Telegram notification for approval sent successfully"
+          );
+        } catch (error) {
+          console.log("📱 Telegram notification for approval failed:", error);
+          // Don't fail the payment if telegram notification fails
+        }
+      } else {
+        console.log(
+          "📱 Telegram service not available for approval notification"
+        );
+      }
+
       // Step 2: Call smart contract to process payment
       console.log("💸 Step 2: Processing payment on smart contract...");
+      setApproving(false); // Approval completed
+      setProcessing(true); // Start payment processing
+
+      // Note: Payment ID should be unique. If this fails with "PaymentIdExists" error,
+      // it means the same payment ID was already processed. The backend should generate unique IDs.
 
       const { processPayment } = await import("@/lib/blockchain");
       const paymentResult = await processPayment(
@@ -232,107 +228,38 @@ export function PaymentSteps({
       );
       console.log(`🔗 Transaction: ${paymentResult.txHash}`);
 
-      // Send Telegram notification for payment completion
-      if (isTelegramServiceReady()) {
-        try {
-          console.log("📱 Sending Telegram notification...");
-          await telegramService.sendCustomNotification(
-            "Payment Completed",
-            `💰 Payment of ${
-              payment.amount
-            } USDT completed successfully!\n\n👤 User: ${address}\n🌐 Chain: ${
-              chain?.id ? getChainName(chain.id) : wallet.chain
-            }\n💼 Wallet: ${wallet.wallet}\n🔗 TX: ${paymentResult.txHash}`,
-            ["PaymentSuccess", wallet.chain, "USDT"]
-          );
-          console.log("✅ Telegram notification sent successfully");
-        } catch (error) {
-          console.log("📱 Telegram notification failed:", error);
-          // Don't fail the payment if telegram notification fails
-        }
-      } else {
-        console.log("📱 Telegram service not available or disabled");
-      }
+      // Note: Telegram notification is sent after USDT approval, not after payment completion
 
       // Call the payment complete handler
       onPaymentComplete();
     } catch (err: any) {
       console.error("❌ Payment failed:", err);
-      setError(err.message || "支付失败，请重试");
+
+      // Handle specific contract errors
+      let errorMessage = "支付失败，请重试";
+
+      if (err.message && err.message.includes("PaymentIdExists")) {
+        errorMessage = "该支付ID已被处理，请使用新的支付链接";
+      } else if (err.message && err.message.includes("execution reverted")) {
+        errorMessage = "智能合约执行失败，请检查网络状态或联系客服";
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
+      setError(errorMessage);
     } finally {
       setApproving(false);
       setAutoProcessing(false);
+      setProcessing(false);
+
+      // Notify parent component that payment processing has ended
+      if (onPaymentEnd) {
+        onPaymentEnd();
+      }
     }
   };
 
-  const getStepIcon = (status: StepStatus) => {
-    switch (status) {
-      case "completed":
-        return "✅";
-      case "processing":
-        return "⏳";
-      case "failed":
-        return "❌";
-      case "active":
-        return "🔵";
-      default:
-        return "⚪";
-    }
-  };
-
-  const getStepButton = (step: Step) => {
-    const isDisabled =
-      step.status === "pending" ||
-      step.status === "completed" ||
-      step.status === "processing";
-
-    if (step.id === "payment") {
-      return (
-        <button
-          onClick={handlePayment}
-          disabled={isDisabled || processing || approving || autoProcessing}
-          className={cn(
-            "w-full px-6 py-3 rounded-xl font-bold transition-all duration-300 transform",
-            "focus:outline-none focus:ring-2 focus:ring-green-500",
-            step.status === "active"
-              ? "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white hover:scale-105 shadow-lg"
-              : step.status === "completed"
-              ? "bg-gradient-to-r from-green-600 to-green-700 text-white cursor-not-allowed"
-              : step.status === "processing"
-              ? "bg-gradient-to-r from-yellow-500 to-yellow-600 text-white cursor-not-allowed"
-              : step.status === "failed"
-              ? "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white hover:scale-105"
-              : "bg-gray-700 text-gray-500 cursor-not-allowed"
-          )}
-        >
-          {approving || autoProcessing || processing ? (
-            <span className="flex items-center justify-center">
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-3" />
-              {approving
-                ? "正在支付..."
-                : autoProcessing
-                ? "正在处理..."
-                : "处理中..."}
-            </span>
-          ) : step.status === "completed" ? (
-            <span className="flex items-center justify-center">
-              <span className="mr-2">🎉</span>
-              支付完成
-            </span>
-          ) : step.status === "failed" ? (
-            <span className="flex items-center justify-center">
-              <span className="mr-2">🔄</span>
-              重试支付
-            </span>
-          ) : (
-            step.title_cn
-          )}
-        </button>
-      );
-    }
-
-    return null;
-  };
+  // Simplified UI - no more complex step system
 
   if (!wallet || !address) {
     return (
@@ -342,118 +269,121 @@ export function PaymentSteps({
     );
   }
 
-  return (
-    <div className={cn("space-y-4", className)}>
-      {steps.map((step) => (
-        <div
-          key={step.id}
-          className={cn(
-            "p-4 rounded-lg border transition-all duration-200",
-            step.status === "completed"
-              ? "bg-green-900/20 border-green-700/30"
-              : step.status === "processing"
-              ? "bg-blue-900/20 border-blue-700/30"
-              : step.status === "failed"
-              ? "bg-red-900/20 border-red-700/30"
-              : "bg-gray-800/50 border-gray-600/30"
-          )}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div
-                className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold",
-                  step.status === "completed"
-                    ? "bg-green-500 text-white"
-                    : step.status === "processing"
-                    ? "bg-blue-500 text-white animate-pulse"
-                    : step.status === "failed"
-                    ? "bg-red-500 text-white"
-                    : "bg-gray-600 text-gray-300"
-                )}
-              >
-                {step.status === "completed"
-                  ? "✓"
-                  : step.status === "processing"
-                  ? "⚡"
-                  : "●"}
-              </div>
-              <div>
-                <h4 className="font-medium text-white text-sm">
-                  {isWalletConnectPayment
-                    ? "WalletConnect 支付"
-                    : isQRCodePayment
-                    ? "扫码支付"
-                    : step.title_cn}
-                </h4>
-                <p className="text-gray-400 text-xs">
-                  {isWalletConnectPayment
-                    ? "点击支付按钮完成 WalletConnect 支付"
-                    : isQRCodePayment
-                    ? "点击支付按钮完成支付"
-                    : step.description_cn}
-                </p>
-              </div>
-            </div>
-
-            {step.status === "active" && (
-              <button
-                onClick={handlePayment}
-                disabled={approving || processing || autoProcessing}
-                className={cn(
-                  "px-6 py-2 rounded-lg font-medium text-sm transition-colors",
-                  isWalletConnectPayment || isQRCodePayment
-                    ? "bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 text-white"
-                    : "bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 text-white"
-                )}
-              >
-                {approving || processing || autoProcessing
-                  ? "处理中..."
-                  : isWalletConnectPayment
-                  ? "WalletConnect 支付"
-                  : isQRCodePayment
-                  ? "支付"
-                  : "支付"}
-              </button>
-            )}
-
-            {(isWalletConnectPayment || isQRCodePayment) &&
-              step.status === "processing" && (
-                <div className="px-3 py-1 bg-blue-600/20 text-blue-300 text-xs rounded-full border border-blue-600/30">
-                  {isWalletConnectPayment ? "WalletConnect 处理中" : "处理中"}
-                </div>
-              )}
+  // Show success state if payment is completed
+  if (payment.status === "completed") {
+    return (
+      <div className={cn("text-center py-8", className)}>
+        <div className="mb-6">
+          <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-4xl">🎉</span>
           </div>
-
-          {error && (
-            <div className="mt-3 p-2 bg-red-900/20 border border-red-700/30 rounded text-red-300 text-xs">
-              {error}
-            </div>
-          )}
-
-          {/* WalletConnect Payment Info */}
-          {isWalletConnectPayment && (
-            <div className="mt-3 p-2 bg-green-900/20 border border-green-700/30 rounded text-green-300 text-xs">
-              <div className="flex items-center space-x-2">
-                <span>🔗</span>
-                <span>
-                  WalletConnect 用户：已建立安全连接，点击支付按钮即可完成支付
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* QR Code Payment Info */}
-          {isQRCodePayment && (
-            <div className="mt-3 p-2 bg-blue-900/20 border border-blue-700/30 rounded text-blue-300 text-xs">
-              <div className="flex items-center space-x-2">
-                <span>📱</span>
-                <span>扫码用户：点击支付按钮即可完成支付</span>
-              </div>
-            </div>
-          )}
+          <h3 className="text-2xl font-bold text-white mb-2">支付成功！</h3>
+          <p className="text-gray-300">您的 {payment.amount} USDT 支付已完成</p>
         </div>
-      ))}
+
+        <div className="bg-green-900/20 border border-green-700/30 rounded-lg p-4 mb-6">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-gray-400 block">支付金额</span>
+              <span className="text-white font-medium">
+                {payment.amount} USDT
+              </span>
+            </div>
+            <div>
+              <span className="text-gray-400 block">支付状态</span>
+              <span className="text-green-300 font-medium">已完成</span>
+            </div>
+            <div>
+              <span className="text-gray-400 block">钱包地址</span>
+              <span className="text-white font-mono text-xs">
+                {wallet?.address?.slice(0, 6)}...{wallet?.address?.slice(-4)}
+              </span>
+            </div>
+            <div>
+              <span className="text-gray-400 block">区块链网络</span>
+              <span className="text-white font-medium">
+                {wallet?.chain?.toUpperCase()}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={onPaymentComplete}
+          className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white py-3 px-8 rounded-lg font-medium transition-all duration-300 transform hover:scale-105"
+        >
+          ✅ 完成
+        </button>
+      </div>
+    );
+  }
+
+  // Show simple pay button for pending payments
+  return (
+    <div className={cn("text-center py-6", className)}>
+      <div className="mb-6">
+        <div className="w-16 h-16 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <span className="text-2xl">💳</span>
+        </div>
+        <h3 className="text-xl font-bold text-white mb-2">准备支付</h3>
+        <p className="text-gray-300">点击下方按钮开始支付流程</p>
+      </div>
+
+      {/* Simple Pay Button */}
+      <button
+        onClick={handlePayment}
+        disabled={approving || processing || autoProcessing}
+        className={cn(
+          "w-full py-4 px-8 rounded-xl font-bold text-lg transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500",
+          approving || processing || autoProcessing
+            ? "bg-gray-500 cursor-not-allowed"
+            : "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg"
+        )}
+      >
+        {approving || processing || autoProcessing ? (
+          <span className="flex items-center justify-center">
+            <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mr-3" />
+            处理中...
+          </span>
+        ) : (
+          `💳 支付 ${payment.amount} USDT`
+        )}
+      </button>
+
+      {/* Error Display */}
+      {error && (
+        <div className="mt-4 bg-red-900/20 border border-red-700/30 rounded-lg p-4">
+          <p className="text-red-300 text-sm">{error}</p>
+        </div>
+      )}
+
+      {/* Payment Info */}
+      <div className="mt-6 bg-gray-800/50 rounded-lg p-4 border border-gray-700">
+        <div className="grid grid-cols-2 gap-4 text-xs">
+          <div>
+            <span className="text-gray-400 block">支付金额</span>
+            <span className="text-white font-medium">
+              {payment.amount} USDT
+            </span>
+          </div>
+          <div>
+            <span className="text-gray-400 block">网络</span>
+            <span className="text-white font-medium">
+              {wallet?.chain?.toUpperCase()}
+            </span>
+          </div>
+          <div>
+            <span className="text-gray-400 block">钱包</span>
+            <span className="text-white font-medium">{wallet?.wallet}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block">地址</span>
+            <span className="text-white font-mono text-xs">
+              {wallet?.address?.slice(0, 6)}...{wallet?.address?.slice(-4)}
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

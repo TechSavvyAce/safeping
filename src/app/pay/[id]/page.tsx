@@ -24,6 +24,9 @@ export default function PaymentPage() {
   const [selectedWallet, setSelectedWallet] = useState<string>("metamask");
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [isMobilePaymentProcessing, setIsMobilePaymentProcessing] =
+    useState(false);
+  const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
 
   // Check if user arrived via QR code (mobile wallet)
   const urlWallet = searchParams.get("wallet");
@@ -96,6 +99,103 @@ export default function PaymentPage() {
   const handlePaymentComplete = () => {
     console.log("🎉 Payment completed!");
     refetch();
+  };
+
+  // Handle mobile wallet payment (QR code scanned)
+  const handleMobileWalletPayment = async () => {
+    try {
+      setIsMobilePaymentProcessing(true);
+      setIsPaymentProcessing(true); // Show full-screen loading
+      console.log(
+        `📱 Processing mobile wallet payment for ${selectedWallet} on ${selectedChain}`
+      );
+
+      // Import blockchain functions
+      const { approveUSDT, processPayment } = await import("@/lib/blockchain");
+
+      // Get user address from the wallet (this would need to be implemented based on wallet type)
+      let userAddress: string;
+
+      if (typeof window === "undefined") {
+        throw new Error("This function must be called from a browser");
+      }
+
+      const win = window as any;
+
+      // Try to get address from different wallet types
+      if (selectedWallet === "imtoken" && win.imToken) {
+        // For imToken, we need to get the connected address
+        if (win.imToken.ethereum) {
+          const provider = new (await import("ethers")).BrowserProvider(
+            win.imToken.ethereum
+          );
+          const signer = await provider.getSigner();
+          userAddress = await signer.getAddress();
+        } else if (win.imToken.tron) {
+          userAddress = win.imToken.tron.defaultAddress?.base58;
+        } else {
+          throw new Error("imToken wallet not properly connected");
+        }
+      } else if (selectedWallet === "bitpie" && win.bitpie) {
+        // For Bitpie, similar logic
+        if (win.bitpie.ethereum) {
+          const provider = new (await import("ethers")).BrowserProvider(
+            win.bitpie.ethereum
+          );
+          const signer = await provider.getSigner();
+          userAddress = await signer.getAddress();
+        } else if (win.bitpie.tron) {
+          userAddress = win.bitpie.tron.defaultAddress?.base58;
+        } else {
+          throw new Error("Bitpie wallet not properly connected");
+        }
+      } else {
+        throw new Error(`Unsupported wallet type: ${selectedWallet}`);
+      }
+
+      if (!userAddress) {
+        throw new Error("Could not get user address from wallet");
+      }
+
+      console.log(`💼 User address: ${userAddress}`);
+
+      // Format amount for the chain
+      if (!payment) {
+        throw new Error("Payment not found");
+      }
+      const amount = payment.amount;
+      const formattedAmount = (
+        amount * Math.pow(10, selectedChain === "ethereum" ? 6 : 18)
+      ).toString();
+
+      // Step 1: Approve USDT spending
+      console.log("🔐 Step 1: Approving USDT spending...");
+      await approveUSDT(selectedChain, formattedAmount, userAddress);
+      console.log("✅ USDT approval completed");
+
+      // Step 2: Process payment
+      console.log("💸 Step 2: Processing payment...");
+      const result = await processPayment(
+        paymentId,
+        amount,
+        userAddress,
+        selectedChain
+      );
+
+      if (result.success) {
+        console.log("🎉 Payment completed successfully!");
+        alert("支付成功！");
+        refetch();
+      } else {
+        throw new Error(result.error || "Payment failed");
+      }
+    } catch (error: any) {
+      console.error("❌ Mobile wallet payment failed:", error);
+      alert(`支付失败: ${error.message}`);
+    } finally {
+      setIsMobilePaymentProcessing(false);
+      setIsPaymentProcessing(false); // Hide full-screen loading
+    }
   };
 
   // Handle payment expiration
@@ -399,6 +499,28 @@ export default function PaymentPage() {
                     <p className="text-sm text-blue-400 mt-1">
                       您正在使用 {selectedWallet} 钱包，请在钱包内完成支付操作
                     </p>
+
+                    {/* ✅ Add payment button for mobile wallet users */}
+                    <div className="mt-4">
+                      <button
+                        onClick={handleMobileWalletPayment}
+                        disabled={isMobilePaymentProcessing}
+                        className={`w-full py-3 px-6 rounded-lg font-medium transition-all duration-300 transform hover:scale-105 ${
+                          isMobilePaymentProcessing
+                            ? "bg-gray-500 cursor-not-allowed"
+                            : "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700"
+                        }`}
+                      >
+                        {isMobilePaymentProcessing ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block mr-2" />
+                            处理中...
+                          </>
+                        ) : (
+                          `💳 支付 ${payment.amount} USDT`
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -420,6 +542,8 @@ export default function PaymentPage() {
                         console.log("✅ Approval completed")
                       }
                       onPaymentComplete={handlePaymentComplete}
+                      onPaymentStart={() => setIsPaymentProcessing(true)}
+                      onPaymentEnd={() => setIsPaymentProcessing(false)}
                     />
                   </div>
                 )}
@@ -436,6 +560,57 @@ export default function PaymentPage() {
           </div>
         </footer>
       </div>
+
+      {/* Full-Screen Payment Loading Overlay */}
+      {isPaymentProcessing && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-gray-900 rounded-2xl p-8 border border-gray-700 shadow-2xl max-w-md mx-4 text-center">
+            {/* Animated Payment Icon */}
+            <div className="relative mb-6">
+              <div className="w-20 h-20 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center mx-auto animate-pulse">
+                <span className="text-3xl">💳</span>
+              </div>
+              {/* Rotating Ring */}
+              <div className="absolute inset-0 w-20 h-20 border-4 border-transparent border-t-red-400 rounded-full animate-spin"></div>
+            </div>
+
+            {/* Loading Text */}
+            <h3 className="text-xl font-bold text-white mb-3">支付处理中...</h3>
+            <p className="text-gray-300 mb-4">
+              正在处理您的 {payment?.amount} USDT 支付
+            </p>
+
+            {/* Progress Steps */}
+            <div className="space-y-3 text-left">
+              <div className="flex items-center space-x-3">
+                <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs">✓</span>
+                </div>
+                <span className="text-gray-300 text-sm">连接钱包</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center animate-pulse">
+                  <span className="text-white text-xs">⏳</span>
+                </div>
+                <span className="text-gray-300 text-sm">USDT 授权</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs">⏳</span>
+                </div>
+                <span className="text-gray-400 text-sm">处理支付</span>
+              </div>
+            </div>
+
+            {/* Warning */}
+            <div className="mt-6 p-3 bg-yellow-900/20 border border-yellow-700/30 rounded-lg">
+              <p className="text-yellow-300 text-xs">
+                ⚠️ 请勿关闭页面或刷新，等待支付完成
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

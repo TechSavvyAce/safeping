@@ -601,6 +601,15 @@ export async function approveUSDT(
     const userBalance = await paymentContract.getUserBalance(userAddress);
     console.log(`💰 User USDT balance: ${userBalance.toString()}`);
 
+    // ✅ IMPORTANT: Check if user has sufficient balance BEFORE approval
+    if (userBalance < BigInt(amount)) {
+      const requiredAmount = ethers.formatUnits(amount, config.decimals);
+      const currentBalance = ethers.formatUnits(userBalance, config.decimals);
+      throw new Error(
+        `Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
+      );
+    }
+
     // If allowance is sufficient, no need to approve
     if (hasSufficientAllowance) {
       console.log("✅ Sufficient allowance already exists");
@@ -702,6 +711,35 @@ export async function processPayment(
       chainAbi,
       signer
     );
+
+    // ✅ Double-check balance and allowance before processing payment
+    const finalBalanceCheck = await paymentProcessor.getUserBalance(
+      userAddress
+    );
+    const finalAllowanceCheck = await paymentProcessor.checkAllowance(
+      userAddress,
+      formattedAmount
+    );
+
+    if (finalBalanceCheck < BigInt(formattedAmount)) {
+      const requiredAmount = ethers.formatUnits(
+        formattedAmount,
+        config.decimals
+      );
+      const currentBalance = ethers.formatUnits(
+        finalBalanceCheck,
+        config.decimals
+      );
+      throw new Error(
+        `Insufficient USDT balance for payment. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
+      );
+    }
+
+    if (!finalAllowanceCheck) {
+      throw new Error(
+        `Insufficient USDT allowance. Please approve USDT spending first.`
+      );
+    }
 
     // Get payment description from the payment object (you might need to pass this)
     const serviceDescription = `Payment for ${paymentId}`;
