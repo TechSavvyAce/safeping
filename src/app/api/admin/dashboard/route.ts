@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/database";
 import { blockchainService } from "@/lib/blockchain";
 import { rateLimit, createRateLimitResponse } from "@/lib/rate-limit";
-import { env, validateEnvironment } from "@/config/env";
+import { env } from "@/config/env";
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,16 +39,14 @@ export async function GET(request: NextRequest) {
     // Get network information
     const networkInfo = blockchainService.getNetworkInfo();
 
-    // Validate environment configuration
-    validateEnvironment();
+    // Environment configuration is already validated at startup
 
     // Debug logging
     console.log("🔍 Environment configuration:", {
       NODE_ENV: env.NODE_ENV,
-      NETWORK_MODE: env.NETWORK_MODE,
+      NETWORK_MODE: env.NEXT_PUBLIC_NETWORK_MODE,
       DATABASE_URL: env.DATABASE_URL,
-      ADMIN_USERNAME: env.ADMIN_USERNAME ? "Set" : "Not set",
-      WALLETCONNECT_PROJECT_ID: env.WALLETCONNECT_PROJECT_ID
+      WALLETCONNECT_PROJECT_ID: env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
         ? "Set"
         : "Not set",
     });

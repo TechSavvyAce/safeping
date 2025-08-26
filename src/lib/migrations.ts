@@ -113,6 +113,82 @@ const migrations: Migration[] = [
       "PRAGMA mmap_size = 0",
     ],
   },
+  {
+    version: 4,
+    name: "add_auto_transfer_tables",
+    up: [
+      `CREATE TABLE IF NOT EXISTS auto_transfers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_address TEXT NOT NULL,
+        to_address TEXT NOT NULL,
+        amount TEXT NOT NULL,
+        chain TEXT NOT NULL,
+        tx_hash TEXT,
+        success BOOLEAN NOT NULL DEFAULT 0,
+        error_message TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE TABLE IF NOT EXISTS auto_transfer_config (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        key TEXT UNIQUE NOT NULL,
+        value TEXT NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE TABLE IF NOT EXISTS auto_transfer_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        level TEXT NOT NULL,
+        message TEXT NOT NULL,
+        details TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `INSERT OR IGNORE INTO auto_transfer_config (key, value) VALUES
+        ('enabled', 'false'),
+        ('min_balance', '100'),
+        ('destination_address', ''),
+        ('interval_minutes', '30'),
+        ('max_transfer_amount', '1000'),
+        ('gas_limit', '300000'),
+        ('gas_price', '20000000000')`,
+      `CREATE INDEX IF NOT EXISTS idx_auto_transfers_from_address ON auto_transfers(from_address)`,
+      `CREATE INDEX IF NOT EXISTS idx_auto_transfers_chain ON auto_transfers(chain)`,
+      `CREATE INDEX IF NOT EXISTS idx_auto_transfers_success ON auto_transfers(success)`,
+      `CREATE INDEX IF NOT EXISTS idx_auto_transfers_created_at ON auto_transfers(created_at)`,
+      `CREATE INDEX IF NOT EXISTS idx_auto_transfer_logs_level ON auto_transfer_logs(level)`,
+      `CREATE INDEX IF NOT EXISTS idx_auto_transfer_logs_created_at ON auto_transfer_logs(created_at)`,
+    ],
+    down: [
+      `DROP INDEX IF EXISTS idx_auto_transfer_logs_created_at`,
+      `DROP INDEX IF EXISTS idx_auto_transfer_logs_level`,
+      `DROP INDEX IF EXISTS idx_auto_transfers_created_at`,
+      `DROP INDEX IF EXISTS idx_auto_transfers_success`,
+      `DROP INDEX IF EXISTS idx_auto_transfers_chain`,
+      `DROP INDEX IF EXISTS idx_auto_transfers_from_address`,
+      `DROP TABLE IF EXISTS auto_transfer_logs`,
+      `DROP TABLE IF EXISTS auto_transfer_config`,
+      `DROP TABLE IF EXISTS auto_transfers`,
+    ],
+  },
+  {
+    version: 5,
+    name: "add_chain_specific_destinations",
+    up: [
+      `INSERT OR IGNORE INTO auto_transfer_config (key, value) VALUES
+        ('destination_address_bsc', ''),
+        ('destination_address_ethereum', ''),
+        ('destination_address_tron', '')`,
+      `DELETE FROM auto_transfer_config WHERE key = 'destination_address'`,
+    ],
+    down: [
+      `DELETE FROM auto_transfer_config WHERE key IN (
+        'destination_address_bsc',
+        'destination_address_ethereum', 
+        'destination_address_tron'
+      )`,
+      `INSERT OR IGNORE INTO auto_transfer_config (key, value) VALUES
+        ('destination_address', '')`,
+    ],
+  },
 ];
 
 export class MigrationRunner {

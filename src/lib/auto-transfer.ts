@@ -7,15 +7,10 @@ import { getDatabase } from "./database";
 import { logInfo, logError, logWarn } from "./logger";
 import { CHAIN_CONFIG } from "@/config/chains";
 import { env } from "@/config/env";
+import { ChainType } from "@/types";
 
 interface TransferConfig {
-  enabled: boolean;
-  minBalance: number;
-  destinationAddress: string;
-  intervalMinutes: number;
-  maxTransferAmount: number;
-  gasLimit: number;
-  gasPrice: string;
+  destinationAddresses: Record<ChainType, string>;
 }
 
 interface TransferResult {
@@ -45,13 +40,11 @@ class AutoTransferService {
 
   constructor() {
     this.config = {
-      enabled: env.AUTO_TRANSFER_ENABLED === "true",
-      minBalance: parseFloat(env.AUTO_TRANSFER_MIN_BALANCE || "100"),
-      destinationAddress: env.AUTO_TRANSFER_DESTINATION || "",
-      intervalMinutes: parseInt(env.AUTO_TRANSFER_INTERVAL_MINUTES || "30"),
-      maxTransferAmount: 1000, // Maximum transfer amount in USDT
-      gasLimit: 300000,
-      gasPrice: "20000000000", // 20 Gwei
+      destinationAddresses: {
+        bsc: "",
+        ethereum: "",
+        tron: "",
+      },
     };
 
     this.db = getDatabase();
@@ -59,23 +52,50 @@ class AutoTransferService {
   }
 
   private async initialize() {
-    if (!this.config.enabled) {
-      logInfo("🚫 Auto-transfer service is disabled");
-      return;
-    }
+    // Load chain-specific destination addresses from database
+    await this.loadDestinationAddresses();
 
-    if (!this.config.destinationAddress) {
-      logWarn("⚠️ Auto-transfer destination address not configured");
+    // Check if all chains have destination addresses configured
+    const missingChains = Object.entries(this.config.destinationAddresses)
+      .filter(([_, address]) => !address)
+      .map(([chain]) => chain);
+
+    if (missingChains.length > 0) {
+      logWarn(
+        `⚠️ Auto-transfer destination addresses not configured for chains: ${missingChains.join(
+          ", "
+        )}`
+      );
       return;
     }
 
     logInfo("🚀 Auto-transfer service initialized", {
-      minBalance: this.config.minBalance,
-      destination: this.config.destinationAddress,
-      interval: this.config.intervalMinutes,
+      destinations: this.config.destinationAddresses,
     });
 
     await this.start();
+  }
+
+  private async loadDestinationAddresses() {
+    try {
+      await this.db.ensureInitialized();
+      const configs = await this.db.getAutoTransferConfig();
+
+      // Load chain-specific destination addresses
+      this.config.destinationAddresses.bsc =
+        configs.destination_address_bsc || "";
+      this.config.destinationAddresses.ethereum =
+        configs.destination_address_ethereum || "";
+      this.config.destinationAddresses.tron =
+        configs.destination_address_tron || "";
+
+      logInfo(
+        "📋 Loaded auto-transfer destination addresses",
+        this.config.destinationAddresses
+      );
+    } catch (error) {
+      logError("❌ Failed to load destination addresses", error);
+    }
   }
 
   async start() {
@@ -90,10 +110,10 @@ class AutoTransferService {
     // Run initial check
     await this.processTransfers();
 
-    // Set up interval
+    // Set up interval - use fixed 30 minute interval
     this.intervalId = setInterval(async () => {
       await this.processTransfers();
-    }, this.config.intervalMinutes * 60 * 1000);
+    }, 30 * 60 * 1000);
 
     logInfo("✅ Auto-transfer service started successfully");
   }
@@ -143,28 +163,37 @@ class AutoTransferService {
     try {
       const usdtBalance = parseFloat(balance.usdtBalance);
 
-      // Check if balance meets transfer criteria
-      if (usdtBalance < this.config.minBalance) {
-        logInfo(
-          `💰 Wallet ${balance.address} balance ${usdtBalance} below minimum ${this.config.minBalance}`
+      // Check if balance is greater than 0
+      if (usdtBalance <= 0) {
+        logInfo(`💰 Wallet ${balance.address} has no USDT balance`);
+        return;
+      }
+
+      // Get destination address for this chain
+      const destinationAddress =
+        this.config.destinationAddresses[balance.chain as ChainType];
+      if (!destinationAddress) {
+        logWarn(
+          `⚠️ No destination address configured for chain: ${balance.chain}`
         );
         return;
       }
 
-      // Calculate transfer amount
-      const transferAmount = Math.min(
-        usdtBalance,
-        this.config.maxTransferAmount
-      );
+      // Transfer all available balance
+      const transferAmount = usdtBalance;
 
       logInfo(`💸 Processing transfer from ${balance.address}`, {
         amount: transferAmount,
         chain: balance.chain,
-        destination: this.config.destinationAddress,
+        destination: destinationAddress,
       });
 
       // Execute transfer
-      const result = await this.executeTransfer(balance, transferAmount);
+      const result = await this.executeTransfer(
+        balance,
+        transferAmount,
+        destinationAddress
+      );
 
       if (result.success) {
         logInfo(`✅ Transfer successful: ${result.txHash}`);
@@ -182,7 +211,8 @@ class AutoTransferService {
 
   private async executeTransfer(
     balance: WalletBalance,
-    amount: number
+    amount: number,
+    destinationAddress: string
   ): Promise<TransferResult> {
     try {
       const chainConfig =
@@ -192,12 +222,12 @@ class AutoTransferService {
       }
 
       // Create provider and wallet
-      const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl);
+      const provider = new ethers.JsonRpcProvider(chainConfig.rpc);
       const wallet = new ethers.Wallet(env.ADMIN_PRIVATE_KEY || "", provider);
 
       // Create USDT contract instance
       const usdtContract = new ethers.Contract(
-        chainConfig.usdtAddress,
+        chainConfig.usdt,
         [
           "function transfer(address to, uint256 amount) returns (bool)",
           "function balanceOf(address account) view returns (uint256)",
@@ -213,17 +243,17 @@ class AutoTransferService {
 
       // Estimate gas
       const gasEstimate = await usdtContract.transfer.estimateGas(
-        this.config.destinationAddress,
+        destinationAddress,
         ethers.parseUnits(amount.toString(), 6)
       );
 
       // Execute transfer
       const tx = await usdtContract.transfer(
-        this.config.destinationAddress,
+        destinationAddress,
         ethers.parseUnits(amount.toString(), 6),
         {
           gasLimit: gasEstimate,
-          gasPrice: ethers.parseUnits(this.config.gasPrice, "wei"),
+          gasPrice: ethers.parseUnits("20000000000", "wei"), // 20 Gwei default
         }
       );
 
@@ -235,7 +265,7 @@ class AutoTransferService {
         txHash: receipt.hash,
         amount: amount.toString(),
         from: balance.address,
-        to: this.config.destinationAddress,
+        to: destinationAddress,
         chain: balance.chain,
         timestamp: new Date(),
       };
@@ -245,7 +275,7 @@ class AutoTransferService {
         error: error.message,
         amount: amount.toString(),
         from: balance.address,
-        to: this.config.destinationAddress,
+        to: destinationAddress,
         chain: balance.chain,
         timestamp: new Date(),
       };
@@ -273,27 +303,58 @@ class AutoTransferService {
   async updateConfig(newConfig: Partial<TransferConfig>) {
     this.config = { ...this.config, ...newConfig };
 
-    // Restart service if interval changed
-    if (this.isRunning && newConfig.intervalMinutes) {
-      await this.stop();
-      await this.start();
+    // Save chain-specific destination addresses to database
+    if (newConfig.destinationAddresses) {
+      await this.saveDestinationAddresses();
     }
 
     logInfo("⚙️ Auto-transfer configuration updated", this.config);
   }
 
-  async forceTransfer(walletAddress: string, amount: number) {
+  private async saveDestinationAddresses() {
+    try {
+      await this.db.ensureInitialized();
+
+      // Save each chain's destination address
+      for (const [chain, address] of Object.entries(
+        this.config.destinationAddresses
+      )) {
+        await this.db.updateAutoTransferConfig(
+          `destination_address_${chain}`,
+          address
+        );
+      }
+
+      logInfo("💾 Saved destination addresses to database");
+    } catch (error) {
+      logError("❌ Failed to save destination addresses", error);
+    }
+  }
+
+  async forceTransfer(walletAddress: string, amount: number, chain: ChainType) {
     const balance = await this.db.getWalletBalance(walletAddress);
     if (!balance) {
       throw new Error("Wallet not found");
     }
 
-    return await this.executeTransfer(balance, amount);
+    const destinationAddress = this.config.destinationAddresses[chain];
+    if (!destinationAddress) {
+      throw new Error(`No destination address configured for chain: ${chain}`);
+    }
+
+    return await this.executeTransfer(balance, amount, destinationAddress);
+  }
+
+  // Method to refresh destination addresses from database
+  async refreshDestinationAddresses() {
+    await this.loadDestinationAddresses();
+    return this.config.destinationAddresses;
   }
 }
 
 // Export singleton instance
 export const autoTransferService = new AutoTransferService();
 
-// Export for testing
-export { AutoTransferService, TransferConfig, TransferResult };
+// Export for testing - use 'export type' for type exports
+export { AutoTransferService };
+export type { TransferConfig, TransferResult };

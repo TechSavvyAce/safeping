@@ -36,12 +36,6 @@ const envSchema = z.object({
   BSCSCAN_API_KEY: z.string().optional(),
   TRONGRID_API_KEY: z.string().optional(),
 
-  // Auto-Transfer Configuration
-  AUTO_TRANSFER_ENABLED: z.string().default("false"),
-  AUTO_TRANSFER_MIN_BALANCE: z.string().default("100"),
-  AUTO_TRANSFER_DESTINATION: z.string().optional(),
-  AUTO_TRANSFER_INTERVAL_MINUTES: z.string().default("30"),
-
   // Admin Configuration
   ADMIN_SECRET_KEY: z.string().optional(),
   ADMIN_WALLET_ADDRESS: z.string().optional(),

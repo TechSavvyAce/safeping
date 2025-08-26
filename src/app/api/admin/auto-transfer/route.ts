@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action, config, walletAddress, amount } = body;
+    const { action, config, walletAddress, amount, chain } = body;
 
     switch (action) {
       case "start":
@@ -100,19 +100,28 @@ export async function POST(request: NextRequest) {
         });
 
       case "force-transfer":
-        if (!walletAddress || !amount) {
+        if (!walletAddress || !amount || !chain) {
           return NextResponse.json(
-            { error: "Wallet address and amount required" },
+            { error: "Wallet address, amount, and chain required" },
             { status: 400 }
           );
         }
         const result = await autoTransferService.forceTransfer(
           walletAddress,
-          amount
+          amount,
+          chain
         );
         return NextResponse.json({
           success: true,
           data: result,
+        });
+
+      case "refresh-destinations":
+        const destinations =
+          await autoTransferService.refreshDestinationAddresses();
+        return NextResponse.json({
+          success: true,
+          data: destinations,
         });
 
       default:

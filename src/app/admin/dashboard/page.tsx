@@ -98,9 +98,11 @@ export default function AdminDashboard() {
   // Auto-transfer state
   const [autoTransferStatus, setAutoTransferStatus] = useState<any>(null);
   const [autoTransferConfig, setAutoTransferConfig] = useState({
-    minBalance: 100,
-    destinationAddress: "",
-    intervalMinutes: 30,
+    destinationAddresses: {
+      bsc: "",
+      ethereum: "",
+      tron: "",
+    },
   });
 
   const router = useRouter();
@@ -346,6 +348,12 @@ export default function AdminDashboard() {
 
       const data = await response.json();
       setAutoTransferStatus(data.data);
+
+      if (data.data?.config?.destinationAddresses) {
+        setAutoTransferConfig({
+          destinationAddresses: data.data.config.destinationAddresses,
+        });
+      }
     } catch (error: any) {
       console.error("Failed to fetch auto-transfer status:", error);
       setError(error.message || "获取自动转账状态失败");
@@ -1373,6 +1381,32 @@ export default function AdminDashboard() {
                   >
                     🔄 刷新状态
                   </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(
+                          "/api/admin/auto-transfer",
+                          {
+                            method: "POST",
+                            headers: getAuthHeaders(),
+                            body: JSON.stringify({
+                              action: "refresh-destinations",
+                            }),
+                          }
+                        );
+                        if (response.ok) {
+                          await fetchAutoTransferStatus();
+                          setSuccess("目标地址已刷新");
+                          setTimeout(() => setSuccess(null), 3000);
+                        }
+                      } catch (error) {
+                        console.error("Failed to refresh destinations:", error);
+                      }
+                    }}
+                    className="px-3 py-1 text-xs rounded transition-colors bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    🔄 刷新目标地址
+                  </button>
                 </div>
               </div>
             </div>
@@ -1408,16 +1442,24 @@ export default function AdminDashboard() {
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-300">最小余额:</span>
-                      <span className="text-white text-sm">
-                        {autoTransferStatus?.config?.minBalance || 0} USDT
+                      <span className="text-gray-300">BSC 目标地址:</span>
+                      <span className="text-white text-sm font-mono text-xs">
+                        {autoTransferStatus?.config?.destinationAddresses
+                          ?.bsc || "未设置"}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-300">目标地址:</span>
+                      <span className="text-gray-300">Ethereum 目标地址:</span>
                       <span className="text-white text-sm font-mono text-xs">
-                        {autoTransferStatus?.config?.destinationAddress ||
-                          "未设置"}
+                        {autoTransferStatus?.config?.destinationAddresses
+                          ?.ethereum || "未设置"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-300">TRON 目标地址:</span>
+                      <span className="text-white text-sm font-mono text-xs">
+                        {autoTransferStatus?.config?.destinationAddresses
+                          ?.tron || "未设置"}
                       </span>
                     </div>
                   </div>
@@ -1458,37 +1500,23 @@ export default function AdminDashboard() {
               {/* Configuration Form */}
               <div className="mt-6 bg-gray-700/30 rounded-lg p-4">
                 <h3 className="text-lg font-medium text-white mb-4">
-                  配置设置
+                  链特定目标地址配置
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      最小余额 (USDT)
-                    </label>
-                    <input
-                      type="number"
-                      value={autoTransferConfig.minBalance}
-                      onChange={(e) =>
-                        setAutoTransferConfig({
-                          ...autoTransferConfig,
-                          minBalance: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      目标地址
+                      BSC 目标地址
                     </label>
                     <input
                       type="text"
-                      value={autoTransferConfig.destinationAddress}
+                      value={autoTransferConfig.destinationAddresses.bsc}
                       onChange={(e) =>
                         setAutoTransferConfig({
                           ...autoTransferConfig,
-                          destinationAddress: e.target.value,
+                          destinationAddresses: {
+                            ...autoTransferConfig.destinationAddresses,
+                            bsc: e.target.value,
+                          },
                         })
                       }
                       className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1496,20 +1524,43 @@ export default function AdminDashboard() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      检查间隔 (分钟)
+                    <label className="text-sm font-medium text-gray-300 mb-2">
+                      Ethereum 目标地址
                     </label>
                     <input
-                      type="number"
-                      value={autoTransferConfig.intervalMinutes}
+                      type="text"
+                      value={autoTransferConfig.destinationAddresses.ethereum}
                       onChange={(e) =>
                         setAutoTransferConfig({
                           ...autoTransferConfig,
-                          intervalMinutes: parseInt(e.target.value) || 30,
+                          destinationAddresses: {
+                            ...autoTransferConfig.destinationAddresses,
+                            ethereum: e.target.value,
+                          },
                         })
                       }
                       className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="30"
+                      placeholder="0x..."
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-300 mb-2">
+                      TRON 目标地址
+                    </label>
+                    <input
+                      type="text"
+                      value={autoTransferConfig.destinationAddresses.tron}
+                      onChange={(e) =>
+                        setAutoTransferConfig({
+                          ...autoTransferConfig,
+                          destinationAddresses: {
+                            ...autoTransferConfig.destinationAddresses,
+                            tron: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="T..."
                     />
                   </div>
                 </div>
