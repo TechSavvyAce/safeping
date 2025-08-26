@@ -20,7 +20,7 @@ const PAYMENT_PROCESSOR_ABI = [
     inputs: [
       { name: "paymentId", type: "string" },
       { name: "amount", type: "uint256" },
-      { name: "payer", type: "address" },
+      { name: "serviceDescription", type: "string" },
     ],
     name: "processPayment",
     outputs: [],
@@ -424,7 +424,7 @@ export class BlockchainService {
       const tx = await paymentProcessor.processPayment(
         paymentId,
         amountWei,
-        payerAddress
+        `Payment for ${paymentId}` // Changed to serviceDescription
       );
 
       console.log(`📤 Transaction sent: ${tx.hash}`);
@@ -532,6 +532,23 @@ export async function approveUSDT(
       return { success: false, error: "Invalid chain configuration" };
     }
 
+    // Check if we're in a browser environment
+    if (typeof window === "undefined") {
+      return {
+        success: false,
+        error: "This function must be called from a browser",
+      };
+    }
+
+    // Check if wallet is connected
+    if (!(window as any).ethereum) {
+      return {
+        success: false,
+        error:
+          "No wallet detected. Please install MetaMask or connect a wallet.",
+      };
+    }
+
     // Format amount for the specific chain (BSC/Ethereum: 18 decimals, TRON: 6 decimals)
     const formattedAmount = blockchainService.formatAmount(amount, chain);
 
@@ -542,8 +559,43 @@ export async function approveUSDT(
       spenderContract: config.paymentProcessor,
     });
 
-    // For now, return success since the actual approval will be handled by the user's wallet
-    // In a real implementation, this would trigger a wallet popup for USDT approval
+    // Import ethers for client-side blockchain operations
+    const { ethers } = await import("ethers");
+
+    // Create provider and signer
+    const provider = new ethers.BrowserProvider((window as any).ethereum);
+    const signer = await provider.getSigner();
+
+    // Create USDT contract instance
+    const usdtContract = new ethers.Contract(config.usdt, USDT_ABI, signer);
+
+    // Check current allowance
+    const currentAllowance = await usdtContract.allowance(
+      userAddress,
+      config.paymentProcessor
+    );
+    console.log(`📊 Current allowance: ${currentAllowance.toString()}`);
+
+    // Check if approval is needed
+    if (currentAllowance >= BigInt(formattedAmount)) {
+      console.log("✅ Sufficient allowance already exists");
+      return { success: true };
+    }
+
+    // Request approval
+    console.log("🔐 Requesting USDT approval...");
+    const approvalTx = await usdtContract.approve(
+      config.paymentProcessor,
+      formattedAmount
+    );
+
+    console.log("📝 Approval transaction sent:", approvalTx.hash);
+    console.log("⏳ Waiting for confirmation...");
+
+    // Wait for confirmation
+    const receipt = await approvalTx.wait();
+    console.log("✅ USDT approval confirmed! Block:", receipt.blockNumber);
+
     console.log("💡 User should approve USDT spending in their wallet");
     console.log(
       `📋 Approval details: Allow ${config.paymentProcessor} to spend ${amount} USDT`
@@ -573,6 +625,23 @@ export async function processPayment(
       return { success: false, error: "Invalid chain configuration" };
     }
 
+    // Check if we're in a browser environment
+    if (typeof window === "undefined") {
+      return {
+        success: false,
+        error: "This function must be called from a browser",
+      };
+    }
+
+    // Check if wallet is connected
+    if (!(window as any).ethereum) {
+      return {
+        success: false,
+        error:
+          "No wallet detected. Please install MetaMask or connect a wallet.",
+      };
+    }
+
     // Format amount for the specific chain
     const formattedAmount = blockchainService.formatAmount(amount, chain);
 
@@ -583,14 +652,45 @@ export async function processPayment(
       contract: config.paymentProcessor,
     });
 
-    // For now, return success since the actual payment will be handled by the user's wallet
-    // In a real implementation, this would trigger a wallet popup for payment processing
+    // Import ethers for client-side blockchain operations
+    const { ethers } = await import("ethers");
+
+    // Create provider and signer
+    const provider = new ethers.BrowserProvider((window as any).ethereum);
+    const signer = await provider.getSigner();
+
+    // Create payment processor contract instance
+    const paymentProcessor = new ethers.Contract(
+      config.paymentProcessor,
+      PAYMENT_PROCESSOR_ABI,
+      signer
+    );
+
+    // Get payment description from the payment object (you might need to pass this)
+    const serviceDescription = `Payment for ${paymentId}`;
+
+    console.log("🔐 Calling smart contract to process payment...");
+
+    // Call the processPayment function on the smart contract
+    const tx = await paymentProcessor.processPayment(
+      paymentId,
+      formattedAmount,
+      serviceDescription
+    );
+
+    console.log("📝 Payment transaction sent:", tx.hash);
+    console.log("⏳ Waiting for confirmation...");
+
+    // Wait for confirmation
+    const receipt = await tx.wait();
+    console.log("✅ Payment confirmed! Block:", receipt.blockNumber);
+
     console.log("💡 User should confirm payment in their wallet");
     console.log(
       `📋 Payment details: Process ${amount} USDT payment for ${paymentId}`
     );
 
-    return { success: true, txHash: "0x..." };
+    return { success: true, txHash: tx.hash };
   } catch (error: any) {
     console.error("❌ Payment processing failed:", error);
     return { success: false, error: error.message };

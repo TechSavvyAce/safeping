@@ -8,6 +8,67 @@ import "vitest-canvas-mock";
 // Mock Next.js router
 import { vi, beforeAll, afterAll } from "vitest";
 
+// Mock environment variables for testing
+vi.mock("@/config/env", () => ({
+  env: {
+    NODE_ENV: "test",
+    NEXT_PUBLIC_BASE_URL: "http://localhost:3000",
+    DATABASE_URL: "sqlite:./data/payments-test.db",
+    NEXT_PUBLIC_NETWORK_MODE: "testnet",
+    NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: "test-project-id",
+    RATE_LIMIT_WINDOW_MS: "900000",
+    RATE_LIMIT_MAX_REQUESTS: "100",
+    BSC_RPC_URL: "https://test-bsc-rpc",
+    ETHEREUM_RPC_URL: "https://test-eth-rpc",
+    TRON_RPC_URL: "https://test-tron-rpc",
+    BSC_PAYMENT_PROCESSOR_MAINNET: "0x1234567890123456789012345678901234567890",
+    ETHEREUM_PAYMENT_PROCESSOR_MAINNET:
+      "0x1234567890123456789012345678901234567890",
+    TRON_PAYMENT_PROCESSOR_MAINNET:
+      "TRX1234567890123456789012345678901234567890",
+    BSC_PAYMENT_PROCESSOR_TESTNET: "0x1234567890123456789012345678901234567890",
+    ETHEREUM_PAYMENT_PROCESSOR_TESTNET:
+      "0x1234567890123456789012345678901234567890",
+    TRON_PAYMENT_PROCESSOR_TESTNET:
+      "TRX1234567890123456789012345678901234567890",
+    INFURA_PROJECT_ID: "test-infura-id",
+  },
+  getEnvVar: vi.fn((key: string, fallback?: string) => {
+    const env = {
+      NODE_ENV: "test",
+      NEXT_PUBLIC_BASE_URL: "http://localhost:3000",
+      DATABASE_URL: "sqlite:./data/payments-test.db",
+      NEXT_PUBLIC_NETWORK_MODE: "testnet",
+      NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: "test-project-id",
+      RATE_LIMIT_WINDOW_MS: "900000",
+      RATE_LIMIT_MAX_REQUESTS: "100",
+      BSC_RPC_URL: "https://test-bsc-rpc",
+      ETHEREUM_RPC_URL: "https://test-eth-rpc",
+      TRON_RPC_URL: "https://test-tron-rpc",
+      BSC_PAYMENT_PROCESSOR_MAINNET:
+        "0x1234567890123456789012345678901234567890",
+      ETHEREUM_PAYMENT_PROCESSOR_MAINNET:
+        "0x1234567890123456789012345678901234567890",
+      TRON_PAYMENT_PROCESSOR_MAINNET:
+        "TRX1234567890123456789012345678901234567890",
+      BSC_PAYMENT_PROCESSOR_TESTNET:
+        "0x1234567890123456789012345678901234567890",
+      ETHEREUM_PAYMENT_PROCESSOR_TESTNET:
+        "0x1234567890123456789012345678901234567890",
+      TRON_PAYMENT_PROCESSOR_TESTNET:
+        "TRX1234567890123456789012345678901234567890",
+      INFURA_PROJECT_ID: "test-infura-id",
+    };
+    return env[key] || fallback || "";
+  }),
+  isFeatureEnabled: vi.fn((key: string) => {
+    const env = {
+      AUTO_TRANSFER_ENABLED: "true",
+    };
+    return env[key] === "true" || env[key] === "1";
+  }),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: vi.fn(),
