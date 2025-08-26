@@ -38,10 +38,10 @@ export default function PaymentPage() {
   const urlChain = searchParams.get("chain") as ChainType;
 
   const [selectedChain, setSelectedChain] = useState<ChainType | null>(
-    urlChain || null
+    urlChain || "ethereum" // Default to Ethereum if no URL parameter
   );
   const [selectedWallet, setSelectedWallet] = useState<string | null>(
-    urlWallet || null
+    urlWallet || "metamask" // Default to MetaMask if no URL parameter
   );
   const [currentStep, setCurrentStep] = useState<"chain-selection" | "payment">(
     urlChain && urlWallet ? "payment" : "chain-selection"
@@ -67,6 +67,10 @@ export default function PaymentPage() {
     } else if (urlChain) {
       setSelectedChain(urlChain);
       setCurrentStep("chain-selection");
+    } else {
+      // Set default chain and wallet if none provided
+      setSelectedChain("ethereum");
+      setSelectedWallet("metamask");
     }
   }, [urlChain, urlWallet, searchParams]);
 
@@ -233,12 +237,26 @@ export default function PaymentPage() {
     }
   };
 
-  const handleWalletConnected = async (walletId: string, address: string) => {
-    if (!selectedChain) return;
+  const handleStartPayment = async (walletId: string, address: string) => {
+    if (!selectedChain || !payment) return;
 
+    console.log("🚀 Starting payment process for:", address);
+    console.log("📋 Payment details:", {
+      amount: payment.amount,
+      chain: selectedChain,
+      wallet: walletId,
+      address: address,
+    });
+
+    // Set wallet info and move to payment step
     setSelectedWallet(walletId);
     setWalletAddress(address);
-    console.log("🔗 Wallet connected successfully:", address);
+    setCurrentStep("payment");
+
+    console.log("✅ Moved to payment step - ready for USDT approval");
+    console.log(
+      "💡 Next: User will need to approve USDT spending in their wallet"
+    );
   };
 
   const handleBackToChainSelection = () => {
@@ -448,7 +466,7 @@ export default function PaymentPage() {
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                   <WalletSelector
                     selectedChain={selectedChain || "ethereum"}
-                    onWalletConnected={handleWalletConnected}
+                    onStartPayment={handleStartPayment}
                   />
                 </div>
               )}

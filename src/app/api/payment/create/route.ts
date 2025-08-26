@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Get base URL from environment configuration
-    const baseUrl = env.BASE_URL;
+    const baseUrl = env.NEXT_PUBLIC_BASE_URL;
     const paymentUrl = `${baseUrl}/pay/${paymentId}`;
 
     // Generate QR code for mobile

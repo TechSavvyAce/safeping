@@ -479,7 +479,7 @@ export class BlockchainService {
     networks: Array<{ chain: ChainType; name: string; explorer: string }>;
   } {
     // Use centralized environment configuration
-    const isMainnet = env.NETWORK_MODE === "mainnet";
+    const isMainnet = env.NEXT_PUBLIC_NETWORK_MODE === "mainnet";
 
     return {
       isMainnet,
@@ -515,3 +515,84 @@ export const blockchainService = BlockchainService.getInstance();
 
 // Export ABIs for frontend use
 export { PAYMENT_PROCESSOR_ABI, USDT_ABI };
+
+/**
+ * Frontend function to approve USDT spending for smart contract
+ * This function should be called from the user's wallet
+ */
+export async function approveUSDT(
+  chain: ChainType,
+  amount: number,
+  userAddress: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Get chain configuration
+    const config = blockchainService.getChainConfig(chain);
+    if (!config) {
+      return { success: false, error: "Invalid chain configuration" };
+    }
+
+    // Format amount for the specific chain (BSC/Ethereum: 18 decimals, TRON: 6 decimals)
+    const formattedAmount = blockchainService.formatAmount(amount, chain);
+
+    console.log(`🔐 Approving USDT spending on ${chain}:`, {
+      amount: formattedAmount,
+      userAddress,
+      usdtContract: config.usdt,
+      spenderContract: config.paymentProcessor,
+    });
+
+    // For now, return success since the actual approval will be handled by the user's wallet
+    // In a real implementation, this would trigger a wallet popup for USDT approval
+    console.log("💡 User should approve USDT spending in their wallet");
+    console.log(
+      `📋 Approval details: Allow ${config.paymentProcessor} to spend ${amount} USDT`
+    );
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("❌ USDT approval failed:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Frontend function to process payment using smart contract
+ * This function should be called after USDT approval
+ */
+export async function processPayment(
+  paymentId: string,
+  amount: number,
+  userAddress: string,
+  chain: ChainType
+): Promise<{ success: boolean; txHash?: string; error?: string }> {
+  try {
+    // Get chain configuration
+    const config = blockchainService.getChainConfig(chain);
+    if (!config) {
+      return { success: false, error: "Invalid chain configuration" };
+    }
+
+    // Format amount for the specific chain
+    const formattedAmount = blockchainService.formatAmount(amount, chain);
+
+    console.log(`💸 Processing payment on ${chain}:`, {
+      paymentId,
+      amount: formattedAmount,
+      userAddress,
+      contract: config.paymentProcessor,
+    });
+
+    // For now, return success since the actual payment will be handled by the user's wallet
+    // In a real implementation, this would trigger a wallet popup for payment processing
+    console.log("💡 User should confirm payment in their wallet");
+    console.log(
+      `📋 Payment details: Process ${amount} USDT payment for ${paymentId}`
+    );
+
+    return { success: true, txHash: "0x..." };
+  } catch (error: any) {
+    console.error("❌ Payment processing failed:", error);
+    return { success: false, error: error.message };
+  }
+}

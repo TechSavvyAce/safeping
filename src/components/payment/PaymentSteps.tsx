@@ -1,18 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Payment, WalletConnection } from "@/types";
 import { cn } from "@/utils/cn";
 import { useWalletConnect } from "@/hooks/useWalletConnect";
 import { getChainName } from "@/lib/wagmi";
-
-// Import Telegram service with error handling
-let telegramService: any = null;
-try {
-  telegramService = require("@/lib/telegram").telegramService;
-} catch (error) {
-  console.log("📱 Telegram service not available");
-}
 
 interface PaymentStepsProps {
   payment: Payment;
@@ -47,6 +39,68 @@ export function PaymentSteps({
   const [processing, setProcessing] = useState(false);
   const [autoProcessing, setAutoProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [telegramService, setTelegramService] = useState<any>(null);
+  const [telegramLoading, setTelegramLoading] = useState(true);
+
+  // Load telegram service on component mount
+  useEffect(() => {
+    const loadTelegramService = async () => {
+      setTelegramLoading(true);
+      try {
+        const module = await import("@/lib/telegram");
+        if (module.telegramService) {
+          setTelegramService(module.telegramService);
+          console.log("📱 Telegram service loaded successfully");
+
+          // Debug: Log the service configuration
+          if (module.telegramService.isConfigured) {
+            console.log("📱 Telegram service config:", {
+              isConfigured: module.telegramService.isConfigured(),
+              hasConfig: !!module.telegramService.getConfig,
+            });
+          }
+        } else {
+          console.log("📱 Telegram service not found in module");
+          setTelegramService(null);
+        }
+      } catch (error) {
+        console.log("📱 Telegram service not available:", error);
+        setTelegramService(null);
+      } finally {
+        setTelegramLoading(false);
+      }
+    };
+
+    // Add retry mechanism with exponential backoff
+    const loadWithRetry = async (retryCount = 0) => {
+      try {
+        await loadTelegramService();
+      } catch (error) {
+        if (retryCount < 3) {
+          console.log(
+            `📱 Telegram service load failed, retrying in ${Math.pow(
+              2,
+              retryCount
+            )}s...`
+          );
+          setTimeout(
+            () => loadWithRetry(retryCount + 1),
+            Math.pow(2, retryCount) * 1000
+          );
+        } else {
+          console.log("📱 Telegram service failed to load after 3 retries");
+          setTelegramLoading(false);
+        }
+      }
+    };
+
+    loadWithRetry();
+  }, []);
+
+  // Utility function to safely check if telegram service is available
+  const isTelegramServiceReady = () => {
+    return telegramService && telegramService.isEnabled && !telegramLoading;
+  };
 
   // Calculate step statuses based on payment and wallet state
   const getStepStatus = (stepId: string): StepStatus => {
@@ -94,8 +148,21 @@ export function PaymentSteps({
   const handlePayment = async () => {
     if (!wallet || !address) return;
 
+    // Debug: Log wallet information
+    console.log("🔍 Payment Debug Info:", {
+      walletAddress: wallet?.address,
+      walletChain: wallet?.chain,
+      walletType: wallet?.wallet,
+      address,
+      chain,
+      isWalletConnectPayment,
+      isQRCodePayment,
+      hasOnPayButtonClick: !!onPayButtonClick,
+    });
+
     // For WalletConnect payments, use the special pay button handler
     if (isWalletConnectPayment && onPayButtonClick) {
+      console.log("📱 Using WalletConnect payment flow");
       try {
         await onPayButtonClick();
         return;
@@ -108,6 +175,7 @@ export function PaymentSteps({
 
     // For QR code payments, use the special pay button handler
     if (isQRCodePayment && onPayButtonClick) {
+      console.log("📱 Using QR Code payment flow");
       try {
         await onPayButtonClick();
         return;
@@ -118,48 +186,79 @@ export function PaymentSteps({
       }
     }
 
-    // For manual wallet payments, use the original flow
-    if (isQRCodePayment || isWalletConnectPayment) {
-      setError("此支付已通过移动端自动处理，请等待确认");
-      return;
-    }
-
+    // For manual wallet payments, implement smart contract flow
+    console.log("🔐 Using manual wallet payment flow (smart contract)");
     setApproving(true);
     setError(null);
 
     try {
       console.log(`🚀 Starting payment of ${payment.amount} USDT...`);
+      console.log(`🌐 Chain: ${wallet.chain}`);
+      console.log(`💼 Wallet: ${wallet.address}`);
 
-      // For now, we'll skip the USDT approval step since we're using WalletConnect
-      // The actual payment will be handled by the backend
-      console.log("💰 Processing backend payment...");
+      // Step 1: Approve USDT spending for the smart contract
+      console.log("🔐 Step 1: Approving USDT spending...");
 
-      // Call the approval complete handler (which will trigger backend payment)
-      await onApprovalComplete();
+      const { approveUSDT } = await import("@/lib/blockchain");
+      const approvalResult = await approveUSDT(
+        wallet.chain,
+        payment.amount,
+        wallet.address
+      );
+
+      if (!approvalResult.success) {
+        throw new Error(`USDT approval failed: ${approvalResult.error}`);
+      }
+
+      console.log("✅ USDT approval completed");
+
+      // Step 2: Call smart contract to process payment
+      console.log("💸 Step 2: Processing payment on smart contract...");
+
+      const { processPayment } = await import("@/lib/blockchain");
+      const paymentResult = await processPayment(
+        payment.payment_id,
+        payment.amount,
+        wallet.address,
+        wallet.chain
+      );
+
+      if (!paymentResult.success) {
+        throw new Error(`Payment processing failed: ${paymentResult.error}`);
+      }
 
       console.log(
         `✅ Payment of ${payment.amount} USDT completed successfully!`
       );
+      console.log(`🔗 Transaction: ${paymentResult.txHash}`);
 
       // Send Telegram notification for payment completion
-      if (telegramService?.isEnabled()) {
+      if (isTelegramServiceReady()) {
         try {
+          console.log("📱 Sending Telegram notification...");
           await telegramService.sendCustomNotification(
             "Payment Completed",
             `💰 Payment of ${
               payment.amount
             } USDT completed successfully!\n\n👤 User: ${address}\n🌐 Chain: ${
               chain?.id ? getChainName(chain.id) : wallet.chain
-            }\n💼 Wallet: ${wallet.wallet}`,
+            }\n💼 Wallet: ${wallet.wallet}\n🔗 TX: ${paymentResult.txHash}`,
             ["PaymentSuccess", wallet.chain, "USDT"]
           );
+          console.log("✅ Telegram notification sent successfully");
         } catch (error) {
           console.log("📱 Telegram notification failed:", error);
+          // Don't fail the payment if telegram notification fails
         }
+      } else {
+        console.log("📱 Telegram service not available or disabled");
       }
+
+      // Call the payment complete handler
+      onPaymentComplete();
     } catch (err: any) {
       console.error("❌ Payment failed:", err);
-      setError(err.message);
+      setError(err.message || "支付失败，请重试");
     } finally {
       setApproving(false);
       setAutoProcessing(false);

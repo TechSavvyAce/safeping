@@ -2,8 +2,6 @@
 // 📱 Telegram Bot Notification Service
 // =================================
 
-import { env } from "@/config/env";
-
 interface TelegramMessage {
   text: string;
   parse_mode?: "HTML" | "Markdown";
@@ -31,14 +29,24 @@ class TelegramService {
     token: string | undefined;
     channelId: string | undefined;
     isEnabled: boolean;
-  };
+  } | null = null;
 
   constructor() {
-    // Get Telegram config from validated environment
+    // Only initialize on client-side
+    if (typeof window !== "undefined") {
+      this.initializeConfig();
+    }
+  }
+
+  private initializeConfig() {
+    // Get Telegram config directly from process.env (client-side)
     this.config = {
-      token: env.TELEGRAM_TOKEN,
-      channelId: env.TELEGRAM_CHANNEL_ID,
-      isEnabled: !!(env.TELEGRAM_TOKEN && env.TELEGRAM_CHANNEL_ID),
+      token: process.env.NEXT_PUBLIC_TELEGRAM_TOKEN,
+      channelId: process.env.NEXT_PUBLIC_TELEGRAM_CHANNEL_ID,
+      isEnabled: !!(
+        process.env.NEXT_PUBLIC_TELEGRAM_TOKEN &&
+        process.env.NEXT_PUBLIC_TELEGRAM_CHANNEL_ID
+      ),
     };
 
     // Debug logging
@@ -50,14 +58,25 @@ class TelegramService {
         ? `${this.config.token.substring(0, 10)}...`
         : "Not set",
       channelId: this.config.channelId || "Not set",
+      rawToken: this.config.token,
+      rawChannelId: this.config.channelId,
+      envKeys: Object.keys(process.env).filter((key) =>
+        key.includes("TELEGRAM")
+      ),
     });
+  }
+
+  private ensureInitialized() {
+    if (!this.config && typeof window !== "undefined") {
+      this.initializeConfig();
+    }
   }
 
   /**
    * Send a message to the configured Telegram channel
    */
   private async sendMessage(message: TelegramMessage): Promise<boolean> {
-    if (!this.config.isEnabled) {
+    if (!this.config?.isEnabled) {
       console.log("📱 Telegram notifications are disabled");
       return false;
     }
@@ -213,14 +232,15 @@ class TelegramService {
    * Check if Telegram is configured and enabled
    */
   isConfigured(): boolean {
-    return this.config.isEnabled;
+    this.ensureInitialized();
+    return this.config?.isEnabled || false;
   }
 
   /**
    * Get configuration status
    */
-  getConfig(): typeof this.config {
-    return { ...this.config };
+  getConfig() {
+    return this.config ? { ...this.config } : null;
   }
 }
 

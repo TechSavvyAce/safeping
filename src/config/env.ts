@@ -21,8 +21,8 @@ const envSchema = z.object({
   NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: z.string().optional(),
 
   // Telegram Bot
-  TELEGRAM_TOKEN: z.string().optional(),
-  TELEGRAM_CHANNEL_ID: z.string().optional(),
+  NEXT_PUBLIC_TELEGRAM_TOKEN: z.string().optional(),
+  NEXT_PUBLIC_TELEGRAM_CHANNEL_ID: z.string().optional(),
 
   // Webhook
   WEBHOOK_SECRET: z.string().optional(),

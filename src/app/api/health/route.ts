@@ -7,9 +7,41 @@ import { getDatabase } from "@/lib/database";
 import { autoTransferService } from "@/lib/auto-transfer";
 import { telegramService } from "@/lib/telegram";
 
+// Define types for health checks
+type HealthCheckStatus = "healthy" | "unhealthy" | "unknown" | "error";
+
+interface HealthCheck {
+  status: HealthCheckStatus;
+  responseTime: number;
+  details?: any;
+  error?: string;
+}
+
+interface HealthSummary {
+  totalChecks: number;
+  healthyChecks: number;
+  unhealthyChecks: number;
+  totalResponseTime: number;
+}
+
+interface HealthResponse {
+  status: "healthy" | "unhealthy" | "degraded" | "error";
+  timestamp: string;
+  uptime: number;
+  environment: string;
+  version: string;
+  checks: {
+    database: HealthCheck;
+    autoTransfer: HealthCheck;
+    telegram: HealthCheck;
+    system: HealthCheck;
+  };
+  summary: HealthSummary;
+}
+
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
-  const health = {
+  const health: HealthResponse = {
     status: "healthy",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),

@@ -11,7 +11,7 @@ import { env } from "process";
 
 interface WalletSelectorProps {
   selectedChain: ChainType;
-  onWalletConnected: (walletId: string, address: string) => void;
+  onStartPayment: (walletId: string, address: string) => void;
   onChainSelected?: (chainType: ChainType) => void;
   className?: string;
 }
@@ -45,7 +45,7 @@ const USDT_ICON = "/icons/tether.svg";
 
 export function WalletSelector({
   selectedChain,
-  onWalletConnected,
+  onStartPayment,
   onChainSelected,
   className,
 }: WalletSelectorProps) {
@@ -62,6 +62,46 @@ export function WalletSelector({
   useEffect(() => {
     setLocalSelectedChain(selectedChain);
   }, [selectedChain]);
+
+  // Auto-select MetaMask when Ethereum is the default chain
+  useEffect(() => {
+    if (localSelectedChain === "ethereum" && !selectedWallet) {
+      console.log("🔗 Auto-selecting MetaMask for Ethereum chain");
+      setSelectedWallet("metamask");
+
+      // Auto-connect to MetaMask if available
+      if (typeof window !== "undefined" && (window as any).ethereum) {
+        console.log("🦊 MetaMask detected, attempting auto-connection...");
+        // Small delay to ensure component is fully mounted
+        setTimeout(() => {
+          handleConnectWallet();
+        }, 500);
+      }
+    }
+  }, [localSelectedChain, selectedWallet]);
+
+  // Auto-select best wallet for the current chain on component mount
+  useEffect(() => {
+    if (!selectedWallet && localSelectedChain) {
+      const bestWallet = getBestWalletForChain(localSelectedChain);
+      console.log(
+        `🔗 Auto-selecting best wallet for ${localSelectedChain}: ${bestWallet}`
+      );
+      setSelectedWallet(bestWallet);
+
+      // Auto-connect if MetaMask is selected and available
+      if (
+        bestWallet === "metamask" &&
+        typeof window !== "undefined" &&
+        (window as any).ethereum
+      ) {
+        console.log("🦊 Auto-connecting to MetaMask...");
+        setTimeout(() => {
+          handleConnectWallet();
+        }, 1000);
+      }
+    }
+  }, [localSelectedChain, selectedWallet]);
 
   const handleConnectWallet = async () => {
     setIsConnecting(true);
@@ -111,11 +151,17 @@ export function WalletSelector({
     // Update local state immediately for UI feedback
     setLocalSelectedChain(chainType);
 
-    // Clear wallet selection if it's incompatible with the new chain
-    if (selectedWallet && !isWalletCompatible(selectedWallet, chainType)) {
-      setSelectedWallet(null);
-      setShowQRCode(false);
+    // Auto-select appropriate wallet for the chain
+    if (chainType === "ethereum") {
+      setSelectedWallet("metamask");
+    } else if (chainType === "bsc") {
+      setSelectedWallet("metamask"); // MetaMask also supports BSC
+    } else if (chainType === "tron") {
+      setSelectedWallet("tronlink"); // TronLink for TRON network
     }
+
+    // Clear QR code display when switching chains
+    setShowQRCode(false);
 
     // Notify parent component of chain selection
     if (onChainSelected) {
@@ -150,14 +196,33 @@ export function WalletSelector({
     return CHAIN_OPTIONS.find((chain) => chain.id === chainType);
   };
 
-  // Helper function to check if a wallet is compatible with the selected chain
-  const isWalletCompatible = (walletId: string, chainType: ChainType) => {
-    if (chainType === "tron") {
-      return walletId !== "metamask"; // Tron doesn't support MetaMask
-    } else if (chainType === "ethereum" || chainType === "bsc") {
-      return walletId !== "tronlink"; // Ethereum/BSC don't support TronLink
+  // Get the best wallet for a specific chain
+  const getBestWalletForChain = (chainType: ChainType): string => {
+    switch (chainType) {
+      case "ethereum":
+        return "metamask";
+      case "bsc":
+        return "metamask";
+      case "tron":
+        return "tronlink";
+      default:
+        return "metamask";
     }
-    return true; // imToken and Bitpie work with all chains
+  };
+
+  // Check if wallet is compatible with chain
+  const isWalletCompatible = (
+    walletId: string,
+    chainType: ChainType
+  ): boolean => {
+    if (walletId === "metamask") {
+      return chainType === "ethereum" || chainType === "bsc";
+    } else if (walletId === "tronlink") {
+      return chainType === "tron";
+    } else if (walletId === "imtoken" || walletId === "bitpie") {
+      return true; // WalletConnect supports all chains
+    }
+    return false;
   };
 
   // Use local state for UI, but keep the prop for external state management
@@ -321,6 +386,10 @@ export function WalletSelector({
     <div className={cn("w-full", className)}>
       {/* Chain Selection - Compact */}
       <div className="mb-4">
+        <div className="text-center mb-2">
+          <span className="text-gray-400 text-xs">选择网络</span>
+          <span className="text-blue-400 text-xs ml-2">⭐ 推荐: Ethereum</span>
+        </div>
         <div className="grid grid-cols-3 gap-2">
           {CHAIN_OPTIONS.map((chainOption) => (
             <button
@@ -332,12 +401,19 @@ export function WalletSelector({
                 )
               }
               className={cn(
-                "p-3 rounded-lg border transition-all duration-200 text-center",
+                "p-3 rounded-lg border transition-all duration-200 text-center relative",
                 localSelectedChain === chainOption.id
                   ? "border-red-500 bg-red-900/20"
                   : "border-gray-600 bg-gray-800/30 hover:border-gray-500"
               )}
             >
+              {/* Recommended badge for Ethereum */}
+              {chainOption.id === "ethereum" && (
+                <div className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs px-1 rounded-full">
+                  ⭐
+                </div>
+              )}
+
               <div className="flex items-center justify-center space-x-2">
                 <img
                   src={chainOption.icon}
@@ -350,6 +426,46 @@ export function WalletSelector({
               </div>
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Current Selection Status */}
+      <div className="mb-4 p-3 bg-gray-800/30 rounded border border-gray-700/30">
+        <div className="text-center text-sm">
+          <div className="flex items-center justify-center space-x-2 mb-2">
+            <span className="text-gray-400">当前选择:</span>
+            <div className="flex items-center space-x-2">
+              <img
+                src={getChainInfo(localSelectedChain)?.icon}
+                alt={getChainInfo(localSelectedChain)?.name}
+                className="w-4 h-4"
+              />
+              <span className="text-white font-medium">
+                {getChainInfo(localSelectedChain)?.name}
+              </span>
+            </div>
+          </div>
+          {selectedWallet && (
+            <div className="flex items-center justify-center space-x-2">
+              <span className="text-gray-400">推荐钱包:</span>
+              <div className="flex items-center space-x-2">
+                <img
+                  src={`/icons/${selectedWallet}.png`}
+                  alt={selectedWallet}
+                  className="w-4 h-4"
+                />
+                <span className="text-green-400 font-medium capitalize">
+                  {selectedWallet === "metamask"
+                    ? "MetaMask"
+                    : selectedWallet === "tronlink"
+                    ? "TronLink"
+                    : selectedWallet === "imtoken"
+                    ? "imToken"
+                    : "Bitpie"}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -371,6 +487,15 @@ export function WalletSelector({
               localSelectedChain
             );
 
+            // Check if this is the recommended wallet for the current chain
+            const isRecommended =
+              wallet.id === getBestWalletForChain(localSelectedChain);
+
+            // Auto-select recommended wallet if none selected
+            const isSelected =
+              selectedWallet === wallet.id ||
+              (!selectedWallet && isRecommended);
+
             return (
               <button
                 key={wallet.id}
@@ -379,14 +504,21 @@ export function WalletSelector({
                 }
                 disabled={isWalletDisabled}
                 className={cn(
-                  "bg-gray-700/30 rounded p-2 border transition-all duration-200 text-center",
-                  selectedWallet === wallet.id
+                  "bg-gray-700/30 rounded p-2 border transition-all duration-200 text-center relative",
+                  isSelected
                     ? "border-green-500 bg-green-900/20"
                     : isWalletDisabled
                     ? "border-gray-500/30 bg-gray-600/20 opacity-50 cursor-not-allowed"
                     : "border-gray-600/30 hover:border-gray-500"
                 )}
               >
+                {/* Recommended badge */}
+                {isRecommended && (
+                  <div className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs px-1 rounded-full">
+                    ⭐
+                  </div>
+                )}
+
                 <div
                   className={cn(
                     "rounded p-1 mb-1",
@@ -409,11 +541,6 @@ export function WalletSelector({
                   )}
                 >
                   {wallet.name}
-                  {isWalletDisabled && (
-                    <span className="block text-xs text-red-400 mt-1">
-                      {localSelectedChain === "tron" ? "不支持" : "不兼容"}
-                    </span>
-                  )}
                 </p>
               </button>
             );
@@ -554,10 +681,10 @@ export function WalletSelector({
                 </div>
               </div>
               <button
-                onClick={() => onWalletConnected("wallet", address || "")}
+                onClick={() => onStartPayment("wallet", address || "")}
                 className="w-full mt-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
               >
-                继续支付
+                开始支付流程
               </button>
             </div>
           </div>
