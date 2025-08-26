@@ -556,11 +556,6 @@ export async function approveUSDT(
       throw new Error(`Unsupported chain: ${chain}`);
     }
 
-    console.log("🔐 chain:", chain);
-    console.log("🔐 usdt abi:", config.usdt);
-    console.log("🔐 config:", config);
-    console.log("🔐 RPC URL:", config.rpc);
-
     if (!config.rpc) {
       throw new Error(`No RPC URL configured for chain: ${chain}`);
     }
