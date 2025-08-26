@@ -281,7 +281,7 @@ export default function PaymentPage() {
       selectedWallet === "metamask" &&
       (selectedChain === "ethereum" || selectedChain === "bsc")
     ) {
-      const metamaskDeepLink = `https://metamask.app.link/dapp/safeping.xyz?${params}`;
+      const metamaskDeepLink = `https://metamask.app.link/dapp/www.safeping.xyz?${params}`;
       return metamaskDeepLink;
     }
 
