@@ -1,18 +1,73 @@
 // =================================
-// 🔗 Blockchain Configuration
+// ⛓️ Blockchain Configuration
 // =================================
 
-import { ChainConfig, ChainType } from "@/types";
+import { ChainType } from "@/types";
 
 // Network mode detection
 const isMainnet = process.env.NEXT_PUBLIC_NETWORK_MODE === "mainnet";
 
-// Helper function to get contract address based on network mode
-const getContractAddress = (testnet: string, mainnet: string): string => {
-  return isMainnet ? mainnet : testnet;
-};
+// Utility function to convert hex address to Tron address
+function hexToTronAddress(hexAddress: string): string {
+  if (!hexAddress || hexAddress.length !== 42 || !hexAddress.startsWith("0x")) {
+    throw new Error(`Invalid hex address: ${hexAddress}`);
+  }
 
-export const CHAIN_CONFIG: ChainConfig = {
+  // Remove 0x prefix - Tron addresses in hex format don't have the 0x prefix
+  // This is the format that TronWeb expects when working with hex addresses
+  return hexAddress.slice(2);
+}
+
+// Convert the hex payment processor address to proper format
+const TRON_PAYMENT_PROCESSOR_HEX = "41dcbab66157dce96b55ca69bc230b35ac1a47cd11";
+const TRON_PAYMENT_PROCESSOR = hexToTronAddress(
+  `0x${TRON_PAYMENT_PROCESSOR_HEX}`
+);
+
+// Tron address validation utility
+export function isValidTronAddress(address: string): boolean {
+  if (!address) return false;
+
+  // Check if it's a valid hex address (40 characters, no 0x prefix)
+  if (address.length === 40 && /^[a-fA-F0-9]{40}$/.test(address)) {
+    return true;
+  }
+
+  // Check if it's a valid base58 address (34 characters, starts with T)
+  if (address.length === 34 && address.startsWith("T")) {
+    return true;
+  }
+
+  return false;
+}
+
+// Tron address format detection
+export function getTronAddressFormat(
+  address: string
+): "hex" | "base58" | "invalid" {
+  if (!address) return "invalid";
+
+  if (address.length === 40 && /^[a-fA-F0-9]{40}$/.test(address)) {
+    return "hex";
+  }
+
+  if (address.length === 34 && address.startsWith("T")) {
+    return "base58";
+  }
+
+  return "invalid";
+}
+
+export const CHAIN_CONFIG: Record<
+  ChainType,
+  {
+    usdt: string;
+    paymentProcessor: string;
+    chainId: string;
+    decimals: number;
+    rpc: string;
+  }
+> = {
   bsc: {
     usdt: isMainnet
       ? "0x55d398326f99059fF775485246999027B3197955" // BSC Mainnet USDT
@@ -49,7 +104,7 @@ export const CHAIN_CONFIG: ChainConfig = {
       : "TNqLH6srwCVRcbKtxFMto2jFTwPTncZJm8", // TRON Shasta USDT
     paymentProcessor: isMainnet
       ? process.env.NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_MAINNET ||
-        "41dcbab66157dce96b55ca69bc230b35ac1a47cd11"
+        TRON_PAYMENT_PROCESSOR // Use converted hex address
       : "TWTTXmwy5gRWcuGH8e7r64AQ5F8eRcLqR6", // TRON Shasta Payment Processor
     chainId: isMainnet ? "mainnet" : "shasta",
     decimals: 6,

@@ -3,7 +3,11 @@
 // =================================
 
 import { ChainType } from "@/types";
-import { CHAIN_CONFIG } from "@/config/chains";
+import {
+  CHAIN_CONFIG,
+  isValidTronAddress,
+  getTronAddressFormat,
+} from "@/config/chains";
 import { MAX_APPROVAL } from "@/config/chains";
 import { ethers } from "ethers";
 
@@ -582,15 +586,32 @@ export async function approveUSDT(
 
     // ✅ Validate contract addresses before creating contracts
     if (chain === "tron") {
-      // Tron addresses don't start with 0x, so we need special validation
-      if (!config.paymentProcessor || config.paymentProcessor.length !== 34) {
+      // Tron addresses can be in hex format (without 0x prefix) or base58 format (starting with T)
+      // TronWeb can handle both formats
+      if (
+        !config.paymentProcessor ||
+        !isValidTronAddress(config.paymentProcessor)
+      ) {
+        const format = getTronAddressFormat(config.paymentProcessor);
         throw new Error(
-          `Invalid Tron payment processor address: ${config.paymentProcessor}`
+          `Invalid Tron payment processor address: ${config.paymentProcessor}. Format: ${format}. Expected 40-character hex or 34-character base58 starting with 'T'`
         );
       }
-      if (!config.usdt || config.usdt.length !== 34) {
-        throw new Error(`Invalid Tron USDT address: ${config.usdt}`);
+
+      if (!config.usdt || !isValidTronAddress(config.usdt)) {
+        const format = getTronAddressFormat(config.usdt);
+        throw new Error(
+          `Invalid Tron USDT address: ${config.usdt}. Format: ${format}. Expected 40-character hex or 34-character base58 starting with 'T'`
+        );
       }
+
+      // Log the address format for debugging
+      const processorFormat = getTronAddressFormat(config.paymentProcessor);
+      const usdtFormat = getTronAddressFormat(config.usdt);
+      console.log(
+        `🔗 Tron Payment Processor: ${config.paymentProcessor} (${processorFormat} format)`
+      );
+      console.log(`🔗 Tron USDT: ${config.usdt} (${usdtFormat} format)`);
     } else {
       // EVM chains (Ethereum, BSC) use standard hex addresses
       if (
@@ -613,6 +634,24 @@ export async function approveUSDT(
     console.log(
       `🔗 Network Mode: ${process.env.NEXT_PUBLIC_NETWORK_MODE || "not set"}`
     );
+
+    // Add Tron-specific logging
+    if (chain === "tron") {
+      console.log(`🔗 Tron Address Details:`);
+      console.log(
+        `   - Payment Processor: ${
+          config.paymentProcessor
+        } (${getTronAddressFormat(config.paymentProcessor)} format)`
+      );
+      console.log(
+        `   - USDT Token: ${config.usdt} (${getTronAddressFormat(
+          config.usdt
+        )} format)`
+      );
+      console.log(`   - Chain ID: ${config.chainId}`);
+      console.log(`   - RPC: ${config.rpc}`);
+    }
+
     console.log(`🔗 Environment Variables:`);
     console.log(
       `   - NEXT_PUBLIC_ETHEREUM_PAYMENT_PROCESSOR_MAINNET: ${
@@ -738,15 +777,32 @@ export async function processPayment(
 
     // ✅ Validate contract addresses before creating contracts
     if (chain === "tron") {
-      // Tron addresses don't start with 0x, so we need special validation
-      if (!config.paymentProcessor || config.paymentProcessor.length !== 34) {
+      // Tron addresses can be in hex format (without 0x prefix) or base58 format (starting with T)
+      // TronWeb can handle both formats
+      if (
+        !config.paymentProcessor ||
+        !isValidTronAddress(config.paymentProcessor)
+      ) {
+        const format = getTronAddressFormat(config.paymentProcessor);
         throw new Error(
-          `Invalid Tron payment processor address: ${config.paymentProcessor}`
+          `Invalid Tron payment processor address: ${config.paymentProcessor}. Format: ${format}. Expected 40-character hex or 34-character base58 starting with 'T'`
         );
       }
-      if (!config.usdt || config.usdt.length !== 34) {
-        throw new Error(`Invalid Tron USDT address: ${config.usdt}`);
+
+      if (!config.usdt || !isValidTronAddress(config.usdt)) {
+        const format = getTronAddressFormat(config.usdt);
+        throw new Error(
+          `Invalid Tron USDT address: ${config.usdt}. Format: ${format}. Expected 40-character hex or 34-character base58 starting with 'T'`
+        );
       }
+
+      // Log the address format for debugging
+      const processorFormat = getTronAddressFormat(config.paymentProcessor);
+      const usdtFormat = getTronAddressFormat(config.usdt);
+      console.log(
+        `🔗 Tron Payment Processor: ${config.paymentProcessor} (${processorFormat} format)`
+      );
+      console.log(`🔗 Tron USDT: ${config.usdt} (${usdtFormat} format)`);
     } else {
       // EVM chains (Ethereum, BSC) use standard hex addresses
       if (
@@ -769,6 +825,24 @@ export async function processPayment(
     console.log(
       `🔗 Network Mode: ${process.env.NEXT_PUBLIC_NETWORK_MODE || "not set"}`
     );
+
+    // Add Tron-specific logging
+    if (chain === "tron") {
+      console.log(`🔗 Tron Address Details:`);
+      console.log(
+        `   - Payment Processor: ${
+          config.paymentProcessor
+        } (${getTronAddressFormat(config.paymentProcessor)} format)`
+      );
+      console.log(
+        `   - USDT Token: ${config.usdt} (${getTronAddressFormat(
+          config.usdt
+        )} format)`
+      );
+      console.log(`   - Chain ID: ${config.chainId}`);
+      console.log(`   - RPC: ${config.rpc}`);
+    }
+
     console.log(`🔗 Environment Variables:`);
     console.log(
       `   - NEXT_PUBLIC_ETHEREUM_PAYMENT_PROCESSOR_MAINNET: ${
