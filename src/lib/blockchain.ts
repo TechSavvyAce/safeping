@@ -571,7 +571,30 @@ export async function approveUSDT(
         signer = wallet.provider;
       } else {
         // EVM chains use ethers signer
-        signer = await wallet.provider.getSigner();
+        // Try to get signer without triggering ENS resolution
+        try {
+          signer = await wallet.provider.getSigner();
+        } catch (signerError: any) {
+          console.log("Signer error:", signerError);
+          if (
+            signerError.message &&
+            signerError.message.includes("name resolution")
+          ) {
+            // If we get a name resolution error, try to create a signer differently
+            console.log(
+              "🔄 Retrying signer creation without ENS resolution..."
+            );
+            // Create a JsonRpcSigner directly from the provider
+            const accounts = await wallet.provider.send("eth_accounts", []);
+            if (accounts && accounts.length > 0) {
+              signer = await wallet.provider.getSigner(accounts[0]);
+            } else {
+              throw new Error("No accounts found in wallet");
+            }
+          } else {
+            throw signerError;
+          }
+        }
       }
     } catch (e) {
       console.log("Error getting signer:", e);
@@ -697,7 +720,30 @@ export async function processPayment(
         signer = wallet.provider;
       } else {
         // EVM chains use ethers signer
-        signer = await wallet.provider.getSigner();
+        // Try to get signer without triggering ENS resolution
+        try {
+          signer = await wallet.provider.getSigner();
+        } catch (signerError: any) {
+          console.log("Signer error:", signerError);
+          if (
+            signerError.message &&
+            signerError.message.includes("name resolution")
+          ) {
+            // If we get a name resolution error, try to create a signer differently
+            console.log(
+              "🔄 Retrying signer creation without ENS resolution..."
+            );
+            // Create a JsonRpcSigner directly from the provider
+            const accounts = await wallet.provider.send("eth_accounts", []);
+            if (accounts && accounts.length > 0) {
+              signer = await wallet.provider.getSigner(accounts[0]);
+            } else {
+              throw new Error("No accounts found in wallet");
+            }
+          } else {
+            throw signerError;
+          }
+        }
       }
     } catch (e) {
       console.log("Error getting signer:", e);
@@ -718,7 +764,7 @@ export async function processPayment(
     );
     const finalAllowanceCheck = await paymentProcessor.checkAllowance(
       userAddress,
-      formattedAmount
+      BigInt(formattedAmount) // Use BigInt for comparison
     );
 
     if (finalBalanceCheck < BigInt(formattedAmount)) {
@@ -749,7 +795,7 @@ export async function processPayment(
     // Call the processPayment function on the smart contract
     const tx = await paymentProcessor.processPayment(
       paymentId,
-      formattedAmount,
+      BigInt(formattedAmount), // Use BigInt for the amount
       serviceDescription
     );
 
