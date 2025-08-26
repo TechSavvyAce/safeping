@@ -133,8 +133,9 @@ export default function PaymentPage() {
       // Import blockchain functions
       const { approveUSDT, processPayment } = await import("@/lib/blockchain");
 
-      // Get user address from the wallet (this would need to be implemented based on wallet type)
+      // For mobile wallet users, we need to detect the wallet context differently
       let userAddress: string;
+      let walletProvider: any;
 
       if (typeof window === "undefined") {
         throw new Error("This function must be called from a browser");
@@ -142,35 +143,78 @@ export default function PaymentPage() {
 
       const win = window as any;
 
-      // Try to get address from different wallet types
-      if (selectedWallet === "imtoken" && win.imToken) {
-        // For imToken, we need to get the connected address
-        if (win.imToken.ethereum) {
+      // Try to detect wallet based on the selected wallet type and chain
+      if (selectedWallet === "imtoken" || selectedWallet === "bitpie") {
+        // For universal wallets (imToken, Bitpie), check the injected providers
+        if (selectedChain === "tron" && win.tronWeb?.ready) {
+          // Tron context - these wallets inject tronWeb
+          userAddress = win.tronWeb.defaultAddress.base58;
+          walletProvider = win.tronWeb;
+          console.log(`📱 Detected ${selectedWallet} Tron context via tronWeb`);
+        } else if (
+          (selectedChain === "ethereum" || selectedChain === "bsc") &&
+          win.ethereum
+        ) {
+          // EVM context - these wallets inject ethereum provider
           const provider = new (await import("ethers")).BrowserProvider(
-            win.imToken.ethereum
+            win.ethereum
           );
           const signer = await provider.getSigner();
           userAddress = await signer.getAddress();
-        } else if (win.imToken.tron) {
-          userAddress = win.imToken.tron.defaultAddress?.base58;
+          walletProvider = provider;
+          console.log(
+            `📱 Detected ${selectedWallet} EVM context via ethereum provider`
+          );
         } else {
-          throw new Error("imToken wallet not properly connected");
+          throw new Error(
+            `${selectedWallet} wallet not detected. Please ensure you're using ${selectedWallet} app and have selected the correct network.`
+          );
         }
-      } else if (selectedWallet === "bitpie" && win.bitpie) {
-        // For Bitpie, similar logic
-        if (win.bitpie.ethereum) {
+      } else if (selectedWallet === "metamask") {
+        // For MetaMask mobile, check ethereum provider
+        if (win.ethereum) {
           const provider = new (await import("ethers")).BrowserProvider(
-            win.bitpie.ethereum
+            win.ethereum
           );
           const signer = await provider.getSigner();
           userAddress = await signer.getAddress();
-        } else if (win.bitpie.tron) {
-          userAddress = win.bitpie.tron.defaultAddress?.base58;
+          walletProvider = provider;
+          console.log("📱 Detected MetaMask mobile");
         } else {
-          throw new Error("Bitpie wallet not properly connected");
+          throw new Error(
+            "MetaMask not detected. Please ensure you're using MetaMask mobile app."
+          );
+        }
+      } else if (selectedWallet === "tronlink") {
+        // For TronLink mobile, check tronWeb
+        if (win.tronWeb?.ready) {
+          userAddress = win.tronWeb.defaultAddress.base58;
+          walletProvider = win.tronWeb;
+          console.log("📱 Detected TronLink mobile");
+        } else {
+          throw new Error(
+            "TronLink not detected. Please ensure you're using TronLink mobile app."
+          );
         }
       } else {
-        throw new Error(`Unsupported wallet type: ${selectedWallet}`);
+        // Generic wallet detection - try common patterns
+        if (win.ethereum) {
+          const provider = new (await import("ethers")).BrowserProvider(
+            win.ethereum
+          );
+          const signer = await provider.getSigner();
+          userAddress = await signer.getAddress();
+          walletProvider = provider;
+          console.log("📱 Detected generic EVM wallet");
+        } else if (win.tronWeb?.ready) {
+          userAddress = win.tronWeb.defaultAddress.base58;
+          walletProvider = win.tronWeb;
+          console.log("📱 Detected generic Tron wallet");
+        } else {
+          throw new Error(
+            `Wallet ${selectedWallet} not detected. Please ensure your wallet app is properly connected.`
+          );
+        }
       }
 
       if (!userAddress) {
@@ -211,7 +255,40 @@ export default function PaymentPage() {
       }
     } catch (error: any) {
       console.error("❌ Mobile wallet payment failed:", error);
-      alert(`支付失败: ${error.message}`);
+
+      // Handle specific errors with user-friendly messages
+      let errorMessage = "支付失败，请重试";
+
+      if (
+        error.message &&
+        error.message.includes("Insufficient USDT balance")
+      ) {
+        errorMessage = `USDT余额不足！需要: ${
+          payment?.amount || "未知"
+        } USDT，当前余额不足。请确保您的钱包中有足够的USDT。`;
+      } else if (
+        error.message &&
+        error.message.includes("Insufficient USDT allowance")
+      ) {
+        errorMessage = "USDT授权不足！请先完成USDT授权步骤。";
+      } else if (error.message && error.message.includes("User rejected")) {
+        errorMessage = "用户取消了交易";
+      } else if (
+        error.message &&
+        error.message.includes("insufficient funds")
+      ) {
+        errorMessage =
+          "网络费用不足！请确保您的钱包中有足够的原生代币（ETH/BNB/TRX）支付网络费用。";
+      } else if (
+        error.message &&
+        error.message.includes("execution reverted")
+      ) {
+        errorMessage = "智能合约执行失败，请检查网络状态或联系客服";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      alert(`❌ 支付失败\n\n${errorMessage}`);
     } finally {
       setIsMobilePaymentProcessing(false);
       setIsPaymentProcessing(false); // Hide full-screen loading
@@ -657,6 +734,14 @@ export default function PaymentPage() {
 
                     {/* ✅ Add payment button for mobile wallet users */}
                     <div className="mt-4">
+                      {/* Balance Check Warning */}
+                      <div className="mb-3 p-2 bg-yellow-900/20 border border-yellow-700/30 rounded text-center">
+                        <p className="text-yellow-300 text-xs">
+                          ⚠️ 请确保您的钱包中有足够的 {payment.amount} USDT
+                          和网络费用
+                        </p>
+                      </div>
+
                       <button
                         onClick={handleMobileWalletPayment}
                         disabled={isMobilePaymentProcessing}

@@ -1,14 +1,16 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Payment, WalletConnection } from "@/types";
+import { Payment, ChainType } from "@/types";
 import { cn } from "@/utils/cn";
-import { useWalletConnect } from "@/hooks/useWalletConnect";
-import { getChainName } from "@/lib/wagmi";
 
 interface PaymentStepsProps {
   payment: Payment;
-  wallet: WalletConnection | null;
+  wallet: {
+    address: string;
+    wallet: string;
+    chain: ChainType;
+  };
   onApprovalComplete: () => Promise<void> | void;
   onPaymentComplete: () => void;
   onPayButtonClick?: () => Promise<void> | void;
@@ -29,12 +31,12 @@ export function PaymentSteps({
   onPaymentEnd,
   className,
 }: PaymentStepsProps) {
-  const { address, chain } = useWalletConnect();
   const [approving, setApproving] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [autoProcessing, setAutoProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [telegramService, setTelegramService] = useState<any>(null);
+  const [telegramServiceInstance, setTelegramServiceInstance] =
+    useState<any>(null);
   const [telegramLoading, setTelegramLoading] = useState(true);
 
   // Load telegram service on component mount
@@ -44,7 +46,7 @@ export function PaymentSteps({
       try {
         const module = await import("@/lib/telegram");
         if (module.telegramService) {
-          setTelegramService(module.telegramService);
+          setTelegramServiceInstance(module.telegramService);
           console.log("📱 Telegram service loaded successfully");
 
           // Debug: Log the service configuration
@@ -56,11 +58,11 @@ export function PaymentSteps({
           }
         } else {
           console.log("📱 Telegram service not found in module");
-          setTelegramService(null);
+          setTelegramServiceInstance(null);
         }
       } catch (error) {
         console.log("📱 Telegram service not available:", error);
-        setTelegramService(null);
+        setTelegramServiceInstance(null);
       } finally {
         setTelegramLoading(false);
       }
@@ -94,7 +96,11 @@ export function PaymentSteps({
 
   // Utility function to safely check if telegram service is available
   const isTelegramServiceReady = () => {
-    return telegramService && telegramService.isEnabled && !telegramLoading;
+    return (
+      telegramServiceInstance &&
+      telegramServiceInstance.isConfigured() &&
+      !telegramLoading
+    );
   };
 
   // Simplified UI - no more step system
@@ -106,7 +112,7 @@ export function PaymentSteps({
   const isWalletConnectPayment = wallet?.address?.startsWith("wc-");
 
   const handlePayment = async () => {
-    if (!wallet || !address) return;
+    if (!wallet || !wallet.address) return;
 
     // Notify parent component that payment processing has started
     if (onPaymentStart) {
@@ -118,8 +124,8 @@ export function PaymentSteps({
       walletAddress: wallet?.address,
       walletChain: wallet?.chain,
       walletType: wallet?.wallet,
-      address,
-      chain,
+      address: wallet?.address,
+      chain: wallet?.chain,
       isWalletConnectPayment,
       isQRCodePayment,
       hasOnPayButtonClick: !!onPayButtonClick,
@@ -164,30 +170,66 @@ export function PaymentSteps({
       // Step 1: Approve USDT spending for the smart contract
       console.log("🔐 Step 1: Approving USDT spending...");
 
-      const { approveUSDT } = await import("@/lib/blockchain");
-      const approvalResult = await approveUSDT(
-        wallet.chain,
-        payment.amount.toString(),
-        wallet.address
-      );
+      try {
+        const { approveUSDT } = await import("@/lib/blockchain");
+        const approvalResult = await approveUSDT(
+          wallet.chain,
+          payment.amount.toString(),
+          wallet.address
+        );
 
-      if (!approvalResult) {
-        throw new Error(`USDT approval failed`);
+        if (!approvalResult) {
+          throw new Error(`USDT approval failed`);
+        }
+
+        console.log("✅ USDT approval completed");
+
+        // Show success alert for approval
+        alert(
+          `✅ USDT授权成功！\n\n已授权 ${payment.amount} USDT\n正在处理支付...`
+        );
+      } catch (approvalError: any) {
+        console.error("❌ USDT approval failed:", approvalError);
+
+        // Handle specific approval errors
+        let approvalErrorMessage = "USDT授权失败，请重试";
+
+        if (
+          approvalError.message &&
+          approvalError.message.includes("Insufficient USDT balance")
+        ) {
+          approvalErrorMessage = `USDT余额不足！需要: ${payment.amount} USDT，当前余额不足。请确保您的钱包中有足够的USDT。`;
+        } else if (
+          approvalError.message &&
+          approvalError.message.includes("User rejected")
+        ) {
+          approvalErrorMessage = "用户取消了USDT授权";
+        } else if (
+          approvalError.message &&
+          approvalError.message.includes("insufficient funds")
+        ) {
+          approvalErrorMessage =
+            "网络费用不足！请确保您的钱包中有足够的原生代币（ETH/BNB/TRX）支付网络费用。";
+        } else if (approvalError.message) {
+          approvalErrorMessage = approvalError.message;
+        }
+
+        // Show alert to user
+        alert(`❌ USDT授权失败\n\n${approvalErrorMessage}`);
+
+        // Set error and stop processing
+        setError(approvalErrorMessage);
+        setApproving(false);
+        return;
       }
-
-      console.log("✅ USDT approval completed");
 
       // Send Telegram notification for USDT approval completion
       if (isTelegramServiceReady()) {
         try {
           console.log("📱 Sending Telegram notification for USDT approval...");
-          await telegramService.sendCustomNotification(
+          await telegramServiceInstance.sendCustomNotification(
             "USDT Approval Completed",
-            `🔐 USDT approval of ${
-              payment.amount
-            } USDT completed successfully!\n\n👤 User: ${address}\n🌐 Chain: ${
-              chain?.id ? getChainName(chain.id) : wallet.chain
-            }\n💼 Wallet: ${wallet.wallet}\n💰 Amount: ${payment.amount} USDT`,
+            `🔐 USDT approval of ${payment.amount} USDT completed successfully!\n\n👤 User: ${wallet.address}\n🌐 Chain: ${wallet.chain}\n💼 Wallet: ${wallet.wallet}\n💰 Amount: ${payment.amount} USDT`,
             ["USDTApproval", wallet.chain, "USDT"]
           );
           console.log(
@@ -228,6 +270,11 @@ export function PaymentSteps({
       );
       console.log(`🔗 Transaction: ${paymentResult.txHash}`);
 
+      // Show success alert to user
+      alert(
+        `🎉 支付成功！\n\n您已成功支付 ${payment.amount} USDT\n交易哈希: ${paymentResult.txHash}`
+      );
+
       // Note: Telegram notification is sent after USDT approval, not after payment completion
 
       // Call the payment complete handler
@@ -235,17 +282,37 @@ export function PaymentSteps({
     } catch (err: any) {
       console.error("❌ Payment failed:", err);
 
-      // Handle specific contract errors
+      // Handle specific contract errors with user-friendly messages
       let errorMessage = "支付失败，请重试";
 
       if (err.message && err.message.includes("PaymentIdExists")) {
         errorMessage = "该支付ID已被处理，请使用新的支付链接";
       } else if (err.message && err.message.includes("execution reverted")) {
         errorMessage = "智能合约执行失败，请检查网络状态或联系客服";
+      } else if (
+        err.message &&
+        err.message.includes("Insufficient USDT balance")
+      ) {
+        errorMessage = `USDT余额不足！需要: ${payment.amount} USDT，当前余额不足。请确保您的钱包中有足够的USDT。`;
+      } else if (
+        err.message &&
+        err.message.includes("Insufficient USDT allowance")
+      ) {
+        errorMessage = "USDT授权不足！请先完成USDT授权步骤。";
+      } else if (err.message && err.message.includes("User rejected")) {
+        errorMessage = "用户取消了交易";
+      } else if (err.message && err.message.includes("insufficient funds")) {
+        errorMessage =
+          "网络费用不足！请确保您的钱包中有足够的原生代币（ETH/BNB/TRX）支付网络费用。";
       } else if (err.message) {
+        // For other errors, show the actual error message
         errorMessage = err.message;
       }
 
+      // Show alert to user
+      alert(`❌ 支付失败\n\n${errorMessage}`);
+
+      // Also set the error state for UI display
       setError(errorMessage);
     } finally {
       setApproving(false);
@@ -261,7 +328,7 @@ export function PaymentSteps({
 
   // Simplified UI - no more complex step system
 
-  if (!wallet || !address) {
+  if (!wallet || !wallet.address) {
     return (
       <div className={cn("text-center py-8", className)}>
         <p className="text-gray-400">请先连接钱包</p>
@@ -350,10 +417,25 @@ export function PaymentSteps({
         )}
       </button>
 
+      {/* Balance Check Warning */}
+      <div className="mt-3 p-3 bg-yellow-900/20 border border-yellow-700/30 rounded-lg">
+        <p className="text-yellow-300 text-xs text-center">
+          ⚠️ 请确保您的钱包中有足够的 {payment.amount} USDT 和网络费用
+        </p>
+      </div>
+
       {/* Error Display */}
       {error && (
         <div className="mt-4 bg-red-900/20 border border-red-700/30 rounded-lg p-4">
-          <p className="text-red-300 text-sm">{error}</p>
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0">
+              <span className="text-red-400 text-lg">❌</span>
+            </div>
+            <div className="flex-1">
+              <h4 className="text-red-300 font-medium mb-1">支付失败</h4>
+              <p className="text-red-200 text-sm leading-relaxed">{error}</p>
+            </div>
+          </div>
         </div>
       )}
 
