@@ -653,18 +653,18 @@ export async function approveUSDT(
         const usdtContract = tronWeb.contract(TRON_USDT_ABI, config.usdt);
         const userBalance = await usdtContract.balanceOf(userAddress).call();
 
-        // Convert TronWeb response to BigInt for consistent comparison
-        const userBalanceBigInt = BigInt(userBalance.toString());
-        const amountBigInt = BigInt(amount);
+        // Convert TronWeb response to BigNumber for consistent comparison
+        const userBalanceBigNumber = tronWeb.toBigNumber(userBalance);
+        const amountBigNumber = tronWeb.toBigNumber(amount);
 
         // ✅ Check if user has sufficient balance BEFORE approval
-        if (userBalanceBigInt < amountBigInt) {
-          const requiredAmount = (
-            amountBigInt / BigInt(10 ** config.decimals)
-          ).toString();
-          const currentBalance = (
-            userBalanceBigInt / BigInt(10 ** config.decimals)
-          ).toString();
+        if (userBalanceBigNumber.lt(amountBigNumber)) {
+          const requiredAmount = amountBigNumber
+            .div(tronWeb.toBigNumber(10 ** config.decimals))
+            .toString();
+          const currentBalance = userBalanceBigNumber
+            .div(tronWeb.toBigNumber(10 ** config.decimals))
+            .toString();
           console.error(
             `❌ Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
           );
@@ -676,20 +676,20 @@ export async function approveUSDT(
           .allowance(userAddress, config.paymentProcessor)
           .call();
 
-        // Convert allowance to BigInt for consistent comparison
-        const currentAllowanceBigInt = BigInt(currentAllowance.toString());
+        // Convert allowance to BigNumber for consistent comparison
+        const currentAllowanceBigNumber = tronWeb.toBigNumber(currentAllowance);
 
         // If allowance is sufficient, no need to approve
-        if (currentAllowanceBigInt >= amountBigInt) {
+        if (currentAllowanceBigNumber.gte(amountBigNumber)) {
           console.log("✅ Sufficient allowance already exists");
           return true;
         }
 
         console.log("🔐 Approving USDT spending on Tron...");
         console.log(
-          `📊 Current allowance: ${currentAllowanceBigInt.toString()}`
+          `📊 Current allowance: ${currentAllowanceBigNumber.toString()}`
         );
-        console.log(`📊 Required amount: ${amountBigInt.toString()}`);
+        console.log(`📊 Required amount: ${amountBigNumber.toString()}`);
 
         // Approve USDT spending for the payment processor contract
         const approvalTx = await usdtContract
@@ -836,26 +836,27 @@ export async function processPayment(
           .checkAllowance(userAddress, formattedAmount)
           .call();
 
-        // Convert all values to BigInt for consistent comparison
-        const finalBalanceBigInt = BigInt(finalBalanceCheck.toString());
-        const finalAllowanceBigInt = BigInt(finalAllowanceCheck.toString());
-        const formattedAmountBigInt = BigInt(formattedAmount);
+        // Convert all values to BigNumber for consistent comparison
+        const finalBalanceBigNumber = tronWeb.toBigNumber(finalBalanceCheck);
+        const finalAllowanceBigNumber =
+          tronWeb.toBigNumber(finalAllowanceCheck);
+        const formattedAmountBigNumber = tronWeb.toBigNumber(formattedAmount);
 
-        if (finalBalanceBigInt < formattedAmountBigInt) {
-          const requiredAmount = (
-            formattedAmountBigInt / BigInt(10 ** config.decimals)
-          ).toString();
-          const currentBalance = (
-            finalBalanceBigInt / BigInt(10 ** config.decimals)
-          ).toString();
+        if (finalBalanceBigNumber.lt(formattedAmountBigNumber)) {
+          const requiredAmount = formattedAmountBigNumber
+            .div(tronWeb.toBigNumber(10 ** config.decimals))
+            .toString();
+          const currentBalance = finalBalanceBigNumber
+            .div(tronWeb.toBigNumber(10 ** config.decimals))
+            .toString();
           const errorMessage = `Insufficient USDT balance for payment. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`;
           console.error(`❌ ${errorMessage}`);
           return { success: false, error: errorMessage };
         }
 
         if (
-          !finalAllowanceBigInt ||
-          finalAllowanceBigInt < formattedAmountBigInt
+          !finalAllowanceBigNumber ||
+          finalAllowanceBigNumber.lt(formattedAmountBigNumber)
         ) {
           const errorMessage = `Insufficient USDT allowance. Please approve USDT spending first.`;
           console.error(`❌ ${errorMessage}`);
@@ -866,9 +867,13 @@ export async function processPayment(
         const serviceDescription = `Payment for ${paymentId}`;
 
         console.log("🔐 Calling Tron smart contract to process payment...");
-        console.log(`📊 Balance check: ${finalBalanceBigInt.toString()}`);
-        console.log(`📊 Allowance check: ${finalAllowanceBigInt.toString()}`);
-        console.log(`📊 Required amount: ${formattedAmountBigInt.toString()}`);
+        console.log(`📊 Balance check: ${finalBalanceBigNumber.toString()}`);
+        console.log(
+          `📊 Allowance check: ${finalAllowanceBigNumber.toString()}`
+        );
+        console.log(
+          `📊 Required amount: ${formattedAmountBigNumber.toString()}`
+        );
 
         // Call the processPayment function on the Tron smart contract
         const tx = await paymentProcessor
