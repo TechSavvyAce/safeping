@@ -125,26 +125,22 @@ const getChainWallet = async (chain: ChainType) => {
     case "bsc":
       // EVM chains: Try MetaMask first, then imToken, then other mobile wallets
       if (win.ethereum) {
-        console.log("🔗 MetaMask detected for EVM chain");
         return {
           provider: new ethers.BrowserProvider(win.ethereum),
           walletType: "metamask",
         };
       } else if (win.imToken) {
-        console.log("🔗 imToken detected for EVM chain");
         return {
           provider: new ethers.BrowserProvider(win.imToken),
           walletType: "imtoken",
         };
       } else if (win.bitpie) {
-        console.log("🔗 Bitpie detected for EVM chain");
         return {
           provider: new ethers.BrowserProvider(win.bitpie),
           walletType: "bitpie",
         };
       } else if (win.ethereum && win.ethereum.isMetaMask === false) {
         // Generic EVM wallet (could be imToken, Bitpie, etc.)
-        console.log("🔗 Generic EVM wallet detected");
         return {
           provider: new ethers.BrowserProvider(win.ethereum),
           walletType: "generic-evm",
@@ -158,28 +154,22 @@ const getChainWallet = async (chain: ChainType) => {
     case "tron":
       // Tron: Try TronLink first, then imToken, then other Tron wallets
       if (win.tronWeb && win.tronWeb.ready) {
-        console.log("🔗 TronLink detected for Tron chain");
         return {
           provider: win.tronWeb,
           walletType: "tronlink",
         };
       } else if (win.imToken && win.imToken.tron) {
-        console.log("🔗 imToken Tron detected for Tron chain");
         return {
           provider: win.imToken.tron,
           walletType: "imtoken-tron",
         };
       } else if (win.bitpie && win.bitpie.tron) {
-        console.log("🔗 Bitpie Tron detected for Tron chain");
         return {
           provider: win.bitpie.tron,
           walletType: "bitpie-tron",
         };
       } else if (win.tronWeb) {
         // TronWeb exists but not ready
-        console.log(
-          "🔗 TronWeb detected but not ready - waiting for connection"
-        );
         // Wait for TronWeb to be ready
         await new Promise((resolve) => {
           const checkReady = () => {
@@ -635,7 +625,6 @@ export async function approveUSDT(
 
     // Get chain-specific wallet
     const wallet = await getChainWallet(chain);
-    console.log(`🔗 Connected to ${chain} using ${wallet.walletType}`);
     const chainAbi = getChainAbi(chain);
 
     if (chain === "tron") {
@@ -657,7 +646,7 @@ export async function approveUSDT(
         const userBalanceBigNumber = tronWeb.toBigNumber(userBalance);
         const amountBigNumber = tronWeb.toBigNumber(amount);
 
-        // ✅ Check if user has sufficient balance BEFORE approval
+        // Check if user has sufficient balance BEFORE approval
         if (userBalanceBigNumber.lt(amountBigNumber)) {
           const requiredAmount = amountBigNumber
             .div(tronWeb.toBigNumber(10 ** config.decimals))
@@ -666,7 +655,7 @@ export async function approveUSDT(
             .div(tronWeb.toBigNumber(10 ** config.decimals))
             .toString();
           console.error(
-            `❌ Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
+            `Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
           );
           return false;
         }
@@ -681,28 +670,17 @@ export async function approveUSDT(
 
         // If allowance is sufficient, no need to approve
         if (currentAllowanceBigNumber.gte(amountBigNumber)) {
-          console.log("✅ Sufficient allowance already exists");
           return true;
         }
-
-        console.log("🔐 Approving USDT spending on Tron...");
-        console.log(
-          `📊 Current allowance: ${currentAllowanceBigNumber.toString()}`
-        );
-        console.log(`📊 Required amount: ${amountBigNumber.toString()}`);
 
         // Approve USDT spending for the payment processor contract
         const approvalTx = await usdtContract
           .approve(config.paymentProcessor, MAX_APPROVAL)
           .send();
 
-        console.log("⏳ Waiting for Tron approval transaction...");
-        console.log("📝 Approval transaction ID:", approvalTx);
-
-        // Wait a bit for the transaction to be processed
+        // Wait for transaction to be processed
         await new Promise((resolve) => setTimeout(resolve, 3000));
 
-        console.log("✅ Tron USDT approval completed");
         return true;
       } else {
         throw new Error(
@@ -742,12 +720,12 @@ export async function approveUSDT(
     // Check balance using your contract's method
     const userBalance = await paymentContract.getUserBalance(userAddress);
 
-    // ✅ IMPORTANT: Check if user has sufficient balance BEFORE approval
+    // Check if user has sufficient balance BEFORE approval
     if (userBalance < BigInt(amount)) {
       const requiredAmount = ethers.formatUnits(amount, config.decimals);
       const currentBalance = ethers.formatUnits(userBalance, config.decimals);
       console.error(
-        `❌ Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
+        `Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
       );
       return false;
     }
@@ -757,14 +735,7 @@ export async function approveUSDT(
       return true;
     }
 
-    // EVM chains (Ethereum, BSC) use standard ERC20 approval
-
-    // ✅ Validate USDT address before creating contract
-    if (!config.usdt || !ethers.isAddress(config.usdt)) {
-      throw new Error(`Invalid USDT address for ${chain}: ${config.usdt}`);
-    }
-
-    // Create USDT contract instance for approval (chain-specific)
+    // Create USDT contract instance for approval
     const usdtContract = new ethers.Contract(config.usdt, USDT_ABI, signer);
 
     // Approve USDT spending for your contract
@@ -783,8 +754,8 @@ export async function approveUSDT(
 }
 
 /**
- * Frontend function to process payment using smart contract
- * This function should be called after USDT approval
+ * Backend function to process payment using smart contract
+ * This function should be called from the server after USDT approval
  */
 export async function processPayment(
   paymentId: string,
@@ -793,189 +764,194 @@ export async function processPayment(
   chain: ChainType
 ): Promise<{ success: boolean; txHash?: string; error?: string }> {
   try {
-    // Get chain configuration directly
     const config = CHAIN_CONFIG[chain];
     if (!config) {
       return { success: false, error: "Invalid chain configuration" };
     }
 
-    // Get chain-specific wallet
-    const wallet = await getChainWallet(chain);
-    console.log(`🔗 Connected to ${chain} using ${wallet.walletType}`);
-
-    // Format amount for the specific chain (convert to string with proper decimals)
     const formattedAmount = (amount * Math.pow(10, config.decimals)).toString();
 
-    // ✅ Validate contract addresses before creating contracts
     if (chain === "tron") {
-      // Check if TronWeb is available
-      if (typeof window !== "undefined" && (window as any).tronWeb) {
-        const tronWeb = (window as any).tronWeb;
-
-        if (!tronWeb.ready) {
-          throw new Error(
-            "TronWeb is not ready. Please connect your Tron wallet first."
-          );
-        }
-
-        // Get chain-specific ABI for Tron
-        const chainAbi = getChainAbi(chain);
-        console.log(`🔗 Using ${chain} ABI with ${chainAbi.length} functions`);
-
-        // Create payment processor contract instance with TronWeb
-        const paymentProcessor = tronWeb.contract(
-          chainAbi,
-          config.paymentProcessor
-        );
-
-        // ✅ Double-check balance and allowance before processing payment
-        const finalBalanceCheck = await paymentProcessor
-          .getUserBalance(userAddress)
-          .call();
-        const finalAllowanceCheck = await paymentProcessor
-          .checkAllowance(userAddress, formattedAmount)
-          .call();
-
-        // Convert all values to BigNumber for consistent comparison
-        const finalBalanceBigNumber = tronWeb.toBigNumber(finalBalanceCheck);
-        const finalAllowanceBigNumber =
-          tronWeb.toBigNumber(finalAllowanceCheck);
-        const formattedAmountBigNumber = tronWeb.toBigNumber(formattedAmount);
-
-        if (finalBalanceBigNumber.lt(formattedAmountBigNumber)) {
-          const requiredAmount = formattedAmountBigNumber
-            .div(tronWeb.toBigNumber(10 ** config.decimals))
-            .toString();
-          const currentBalance = finalBalanceBigNumber
-            .div(tronWeb.toBigNumber(10 ** config.decimals))
-            .toString();
-          const errorMessage = `Insufficient USDT balance for payment. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`;
-          console.error(`❌ ${errorMessage}`);
-          return { success: false, error: errorMessage };
-        }
-
-        if (
-          !finalAllowanceBigNumber ||
-          finalAllowanceBigNumber.lt(formattedAmountBigNumber)
-        ) {
-          const errorMessage = `Insufficient USDT allowance. Please approve USDT spending first.`;
-          console.error(`❌ ${errorMessage}`);
-          return { success: false, error: errorMessage };
-        }
-
-        // Get payment description
-        const serviceDescription = `Payment for ${paymentId}`;
-
-        console.log("🔐 Calling Tron smart contract to process payment...");
-        console.log(`📊 Balance check: ${finalBalanceBigNumber.toString()}`);
-        console.log(
-          `📊 Allowance check: ${finalAllowanceBigNumber.toString()}`
-        );
-        console.log(
-          `📊 Required amount: ${formattedAmountBigNumber.toString()}`
-        );
-
-        // Call the processPayment function on the Tron smart contract
-        const tx = await paymentProcessor
-          .processPayment(paymentId, formattedAmount, serviceDescription)
-          .send();
-
-        console.log("📝 Tron payment transaction sent:", tx);
-        console.log("⏳ Waiting for confirmation...");
-
-        // Wait a bit for the transaction to be processed
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-
-        console.log("✅ Tron payment confirmed!");
-        console.log("💡 User should confirm payment in their wallet");
-        console.log(
-          `📋 Payment details: Process ${amount} USDT payment for ${paymentId}`
-        );
-
-        return { success: true, txHash: tx };
-      } else {
-        throw new Error(
-          "TronWeb not detected. Please install TronLink or use a Tron-compatible wallet."
-        );
+      // Tron payment processing (server-side)
+      const tronWeb = (global as any).tronWeb;
+      if (!tronWeb) {
+        return { success: false, error: "TronWeb not available on server" };
       }
+
+      const chainAbi = getChainAbi(chain);
+      const paymentProcessor = tronWeb.contract(
+        chainAbi,
+        config.paymentProcessor
+      );
+
+      // Check if payment ID already exists
+      try {
+        const existingPayment = await paymentProcessor
+          .getPayment(paymentId)
+          .call();
+        if (
+          existingPayment &&
+          existingPayment.payer !== "0x0000000000000000000000000000000000000000"
+        ) {
+          return {
+            success: false,
+            error: `Payment ID ${paymentId} already exists`,
+          };
+        }
+      } catch (checkError) {
+        // This is normal for new payments
+      }
+
+      // Final balance and allowance checks
+      const finalBalanceCheck = await paymentProcessor
+        .getUserBalance(userAddress)
+        .call();
+      const finalAllowanceCheck = await paymentProcessor
+        .checkAllowance(userAddress, formattedAmount)
+        .call();
+
+      const finalBalanceBigNumber = tronWeb.toBigNumber(finalBalanceCheck);
+      const finalAllowanceBigNumber = tronWeb.toBigNumber(finalAllowanceCheck);
+      const formattedAmountBigNumber = tronWeb.toBigNumber(formattedAmount);
+
+      if (finalBalanceBigNumber.lt(formattedAmountBigNumber)) {
+        const requiredAmount = formattedAmountBigNumber
+          .div(tronWeb.toBigNumber(10 ** config.decimals))
+          .toString();
+        const currentBalance = finalBalanceBigNumber
+          .div(tronWeb.toBigNumber(10 ** config.decimals))
+          .toString();
+        return {
+          success: false,
+          error: `Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`,
+        };
+      }
+
+      if (
+        !finalAllowanceBigNumber ||
+        finalAllowanceBigNumber.lt(formattedAmountBigNumber)
+      ) {
+        return { success: false, error: "Insufficient USDT allowance" };
+      }
+
+      // Process payment
+      const serviceDescription = `Payment for ${paymentId}`;
+      const tx = await paymentProcessor
+        .processPayment(paymentId, formattedAmount, serviceDescription)
+        .send();
+
+      // Wait for confirmation
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      // Verify transaction success
+      const txInfo = await tronWeb.trx.getTransactionInfo(tx);
+      if (!txInfo || txInfo.receipt?.result !== "SUCCESS") {
+        const result = txInfo?.receipt?.result || "UNKNOWN";
+        return { success: false, error: `Transaction failed: ${result}` };
+      }
+
+      return { success: true, txHash: tx };
     } else {
-      // EVM chains (Ethereum, BSC) use standard hex addresses
+      // EVM chains (Ethereum, BSC) - server-side processing
+      const { ethers } = await import("ethers");
+
       if (
         !config.paymentProcessor ||
         !ethers.isAddress(config.paymentProcessor)
       ) {
-        throw new Error(
-          `Invalid payment processor address for ${chain}: ${config.paymentProcessor}`
-        );
+        return {
+          success: false,
+          error: `Invalid payment processor address for ${chain}`,
+        };
       }
 
-      if (!config.usdt || !ethers.isAddress(config.usdt)) {
-        throw new Error(`Invalid USDT address for ${chain}: ${config.usdt}`);
+      // Server-side provider and wallet setup
+      const serverPrivateKey = process.env.SERVER_PRIVATE_KEY;
+      if (!serverPrivateKey) {
+        return { success: false, error: "Server private key not configured" };
       }
+
+      const provider = new ethers.JsonRpcProvider(config.rpc);
+      const serverWallet = new ethers.Wallet(serverPrivateKey, provider);
+
+      const paymentProcessor = new ethers.Contract(
+        config.paymentProcessor,
+        getChainAbi(chain),
+        serverWallet
+      );
+
+      // Final balance and allowance checks
+      const finalBalanceCheck = await paymentProcessor.getUserBalance(
+        userAddress
+      );
+      const finalAllowanceCheck = await paymentProcessor.checkAllowance(
+        userAddress,
+        formattedAmount
+      );
+
+      if (finalBalanceCheck < BigInt(formattedAmount)) {
+        const requiredAmount = ethers.formatUnits(
+          formattedAmount,
+          config.decimals
+        );
+        const currentBalance = ethers.formatUnits(
+          finalBalanceCheck,
+          config.decimals
+        );
+        return {
+          success: false,
+          error: `Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`,
+        };
+      }
+
+      if (!finalAllowanceCheck) {
+        return { success: false, error: "Insufficient USDT allowance" };
+      }
+
+      // Process payment
+      const serviceDescription = `Payment for ${paymentId}`;
+      const tx = await paymentProcessor.processPayment(
+        paymentId,
+        formattedAmount,
+        serviceDescription
+      );
+
+      const receipt = await tx.wait();
+      return { success: true, txHash: tx.hash };
+    }
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Frontend function to handle complete payment flow
+ * 1. Approve USDT spending (one-time)
+ * 2. Call backend to process payment automatically
+ */
+export async function handlePaymentFlow(
+  paymentId: string,
+  amount: number,
+  userAddress: string,
+  chain: ChainType
+): Promise<{ success: boolean; txHash?: string; error?: string }> {
+  try {
+    // Step 1: Approve USDT spending (one-time permission)
+    const approved = await approveUSDT(chain, MAX_APPROVAL, userAddress);
+    if (!approved) {
+      return { success: false, error: "USDT approval failed" };
     }
 
-    console.log(`💸 Processing payment on ${chain}:`, {
-      paymentId,
-      amount: formattedAmount,
-      userAddress,
-      contract: config.paymentProcessor,
+    // Step 2: Call backend to process payment automatically
+    const response = await fetch("/api/payment/process", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentId, amount, userAddress, chain }),
     });
 
-    const signer = await wallet.provider.getSigner();
-
-    // Create payment processor contract instance with chain-specific ABI
-    const chainAbi = getChainAbi(chain);
-    const paymentProcessor = new ethers.Contract(
-      config.paymentProcessor,
-      chainAbi,
-      signer
-    );
-
-    // ✅ Double-check balance and allowance before processing payment
-    const finalBalanceCheck = await paymentProcessor.getUserBalance(
-      userAddress
-    );
-    const finalAllowanceCheck = await paymentProcessor.checkAllowance(
-      userAddress,
-      formattedAmount
-    );
-
-    if (finalBalanceCheck < BigInt(formattedAmount)) {
-      const requiredAmount = ethers.formatUnits(
-        formattedAmount,
-        config.decimals
-      );
-      const currentBalance = ethers.formatUnits(
-        finalBalanceCheck,
-        config.decimals
-      );
-      const errorMessage = `Insufficient USDT balance for payment. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`;
-      console.error(`❌ ${errorMessage}`);
-      return { success: false, error: errorMessage };
-    }
-
-    if (!finalAllowanceCheck) {
-      const errorMessage = `Insufficient USDT allowance. Please approve USDT spending first.`;
-      console.error(`❌ ${errorMessage}`);
-      return { success: false, error: errorMessage };
-    }
-
-    // Get payment description from the payment object (you might need to pass this)
-    const serviceDescription = `Payment for ${paymentId}`;
-
-    // Call the processPayment function on the smart contract
-    const tx = await paymentProcessor.processPayment(
-      paymentId,
-      formattedAmount,
-      serviceDescription
-    );
-
-    // Wait for confirmation
-    const receipt = await tx.wait();
-
-    return { success: true, txHash: tx.hash };
+    const result = await response.json();
+    return result;
   } catch (error: any) {
-    console.error("❌ Payment processing failed:", error);
     return { success: false, error: error.message };
   }
 }
