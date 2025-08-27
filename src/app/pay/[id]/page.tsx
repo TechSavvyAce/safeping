@@ -11,6 +11,7 @@ import { PaymentStatus } from "@/components/payment/PaymentStatus";
 import { PaymentTimer } from "@/components/payment/PaymentTimer";
 import { NetworkIndicator } from "@/components/ui/NetworkIndicator";
 import { QRCode } from "@/components/ui/QRCode";
+import { handlePaymentFlow } from "@/lib/blockchain";
 
 export default function PaymentPage() {
   const params = useParams();
@@ -237,9 +238,9 @@ export default function PaymentPage() {
       await approveUSDT(selectedChain, formattedAmount, userAddress);
       console.log("✅ USDT approval completed");
 
-      // Step 2: Process payment
-      console.log("💸 Step 2: Processing payment...");
-      const result = await processPayment(
+      // Step 2: Process payment via backend (automatic)
+      console.log("💸 Step 2: Processing payment via backend...");
+      const result = await handlePaymentFlow(
         paymentId,
         amount,
         userAddress,

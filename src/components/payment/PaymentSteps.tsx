@@ -271,8 +271,8 @@ export function PaymentSteps({
       // Note: Payment ID should be unique. If this fails with "PaymentIdExists" error,
       // it means the same payment ID was already processed. The backend should generate unique IDs.
 
-      const { processPayment } = await import("@/lib/blockchain");
-      const paymentResult = await processPayment(
+      const { handlePaymentFlow } = await import("@/lib/blockchain");
+      const paymentResult = await handlePaymentFlow(
         payment.payment_id,
         payment.amount,
         wallet.address,
