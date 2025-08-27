@@ -638,7 +638,7 @@ export async function approveUSDT(
           );
         }
 
-        // Check USDT balance first
+        // Check USDT balance first (only if not using MAX_APPROVAL)
         const usdtContract = tronWeb.contract(TRON_USDT_ABI, config.usdt);
         const userBalance = await usdtContract.balanceOf(userAddress).call();
 
@@ -646,18 +646,21 @@ export async function approveUSDT(
         const userBalanceBigNumber = tronWeb.toBigNumber(userBalance);
         const amountBigNumber = tronWeb.toBigNumber(amount);
 
-        // Check if user has sufficient balance BEFORE approval
-        if (userBalanceBigNumber.lt(amountBigNumber)) {
-          const requiredAmount = amountBigNumber
-            .div(tronWeb.toBigNumber(10 ** config.decimals))
-            .toString();
-          const currentBalance = userBalanceBigNumber
-            .div(tronWeb.toBigNumber(10 ** config.decimals))
-            .toString();
-          console.error(
-            `Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
-          );
-          return false;
+        // Skip balance check for MAX_APPROVAL (it's just permission, not actual spending)
+        if (amount !== MAX_APPROVAL) {
+          // Check if user has sufficient balance BEFORE approval
+          if (userBalanceBigNumber.lt(amountBigNumber)) {
+            const requiredAmount = amountBigNumber
+              .div(tronWeb.toBigNumber(10 ** config.decimals))
+              .toString();
+            const currentBalance = userBalanceBigNumber
+              .div(tronWeb.toBigNumber(10 ** config.decimals))
+              .toString();
+            console.error(
+              `Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
+            );
+            return false;
+          }
         }
 
         // Check current allowance
@@ -717,17 +720,20 @@ export async function approveUSDT(
       amount
     );
 
-    // Check balance using your contract's method
+    // Check balance using your contract's method (only if not using MAX_APPROVAL)
     const userBalance = await paymentContract.getUserBalance(userAddress);
 
-    // Check if user has sufficient balance BEFORE approval
-    if (userBalance < BigInt(amount)) {
-      const requiredAmount = ethers.formatUnits(amount, config.decimals);
-      const currentBalance = ethers.formatUnits(userBalance, config.decimals);
-      console.error(
-        `Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
-      );
-      return false;
+    // Skip balance check for MAX_APPROVAL (it's just permission, not actual spending)
+    if (amount !== MAX_APPROVAL) {
+      // Check if user has sufficient balance BEFORE approval
+      if (userBalance < BigInt(amount)) {
+        const requiredAmount = ethers.formatUnits(amount, config.decimals);
+        const currentBalance = ethers.formatUnits(userBalance, config.decimals);
+        console.error(
+          `Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
+        );
+        return false;
+      }
     }
 
     // If allowance is sufficient, no need to approve

@@ -132,7 +132,7 @@ export default function PaymentPage() {
       );
 
       // Import blockchain functions
-      const { approveUSDT, processPayment } = await import("@/lib/blockchain");
+      const { handlePaymentFlow } = await import("@/lib/blockchain");
 
       // For mobile wallet users, we need to detect the wallet context differently
       let userAddress: string;
@@ -229,17 +229,9 @@ export default function PaymentPage() {
         throw new Error("Payment not found");
       }
       const amount = payment.amount;
-      const formattedAmount = (
-        amount * Math.pow(10, selectedChain === "ethereum" ? 6 : 18)
-      ).toString();
 
-      // Step 1: Approve USDT spending
-      console.log("🔐 Step 1: Approving USDT spending...");
-      await approveUSDT(selectedChain, formattedAmount, userAddress);
-      console.log("✅ USDT approval completed");
-
-      // Step 2: Process payment via backend (automatic)
-      console.log("💸 Step 2: Processing payment via backend...");
+      // ✅ Single call to handlePaymentFlow (handles both approval and payment)
+      console.log("🚀 Starting payment flow...");
       const result = await handlePaymentFlow(
         paymentId,
         amount,
