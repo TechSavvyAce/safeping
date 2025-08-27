@@ -134,20 +134,15 @@ const getChainWallet = async (chain: ChainType) => {
           provider: new ethers.BrowserProvider(win.imToken),
           walletType: "imtoken",
         };
-      } else if (win.bitpie) {
-        return {
-          provider: new ethers.BrowserProvider(win.bitpie),
-          walletType: "bitpie",
-        };
       } else if (win.ethereum && win.ethereum.isMetaMask === false) {
-        // Generic EVM wallet (could be imToken, Bitpie, etc.)
+        // Generic EVM wallet (could be imToken, etc.)
         return {
           provider: new ethers.BrowserProvider(win.ethereum),
           walletType: "generic-evm",
         };
       } else {
         throw new Error(
-          "No EVM wallet detected. Please install MetaMask, imToken, or Bitpie."
+          "No EVM wallet detected. Please install MetaMask or imToken."
         );
       }
 
@@ -162,11 +157,6 @@ const getChainWallet = async (chain: ChainType) => {
         return {
           provider: win.imToken.tron,
           walletType: "imtoken-tron",
-        };
-      } else if (win.bitpie && win.bitpie.tron) {
-        return {
-          provider: win.bitpie.tron,
-          walletType: "bitpie-tron",
         };
       } else if (win.tronWeb) {
         // TronWeb exists but not ready
@@ -187,7 +177,7 @@ const getChainWallet = async (chain: ChainType) => {
         };
       } else {
         throw new Error(
-          "No Tron wallet detected. Please install TronLink, imToken, or Bitpie."
+          "No Tron wallet detected. Please install TronLink or imToken."
         );
       }
 

@@ -219,7 +219,7 @@ export function WalletSelector({
       return chainType === "ethereum" || chainType === "bsc";
     } else if (walletId === "tronlink") {
       return chainType === "tron";
-    } else if (walletId === "imtoken" || walletId === "bitpie") {
+    } else if (walletId === "imtoken") {
       return true; // WalletConnect supports all chains
     }
     return false;
@@ -240,7 +240,6 @@ export function WalletSelector({
       metamask: "metamask",
       imtoken: "imtoken",
       tronlink: "tronlink",
-      bitpie: "bitpie",
     };
 
     // Map chain IDs to readable names
@@ -267,11 +266,6 @@ export function WalletSelector({
       return `tronlinkoutside://navigate/DappView?url=${encodeURIComponent(
         `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=${walletParam}&connect=tronlink`
       )}`;
-    } else if (selectedWallet === "bitpie") {
-      // Bitpie deep link - opens Bitpie app with WalletConnect
-      return `bitpie://navigate/DappView?url=${encodeURIComponent(
-        `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=${walletParam}&connect=bitpie`
-      )}`;
     }
 
     // Fallback to regular URL
@@ -283,7 +277,7 @@ export function WalletSelector({
     if (!selectedWallet || !localSelectedChain) return "";
 
     // For imToken and Bitpie, generate WalletConnect URI
-    if (selectedWallet === "imtoken" || selectedWallet === "bitpie") {
+    if (selectedWallet === "imtoken") {
       const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
       const chainId =
         localSelectedChain === "ethereum"
@@ -334,13 +328,6 @@ export function WalletSelector({
         const tronlinkUrl = `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=tronlink&connect=tronlink&source=qr`;
         return `tronlinkoutside://navigate/DappView?url=${encodeURIComponent(
           tronlinkUrl
-        )}`;
-
-      case "bitpie":
-        // Bitpie deep link - opens app with WalletConnect
-        const bitpieUrl = `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=bitpie&connect=walletconnect&source=qr`;
-        return `bitpie://navigate/DappView?url=${encodeURIComponent(
-          bitpieUrl
         )}`;
 
       default:
@@ -474,12 +461,11 @@ export function WalletSelector({
         <div className="text-center mb-2">
           <span className="text-gray-400 text-xs">选择钱包</span>
         </div>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {[
             { id: "metamask", name: "MetaMask", icon: "/icons/metamask.png" },
             { id: "imtoken", name: "imToken", icon: "/icons/imtoken.png" },
             { id: "tronlink", name: "TronLink", icon: "/icons/tronlink.png" },
-            { id: "bitpie", name: "Bitpie", icon: "/icons/bitpie.png" },
           ].map((wallet) => {
             // Determine if wallet should be disabled based on selected chain
             const isWalletDisabled = !isWalletCompatible(
