@@ -11,6 +11,11 @@ export function Web3ModalProvider({ children }: Web3ModalProviderProps) {
   useEffect(() => {
     // Web3Modal is already initialized in the imported file
     // This component just ensures it's available in the React context
+    if (!web3modal) {
+      console.warn(
+        "Web3Modal is not available. WalletConnect features will be limited."
+      );
+    }
   }, []);
 
   return <>{children}</>;

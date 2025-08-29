@@ -1,34 +1,36 @@
 import { createConfig, http, createStorage } from "wagmi";
 import { mainnet, bsc } from "wagmi/chains";
 import { injected, metaMask, walletConnect } from "wagmi/connectors";
+import { isWalletConnectConfigured, env } from "./env";
 
-const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
-
+// Create a safe configuration that won't crash if WalletConnect is not configured
 export const config = createConfig({
   chains: [mainnet, bsc],
   connectors: [
     injected(),
     metaMask(),
-    walletConnect({
-      projectId: projectId || "",
-      showQrModal: false, // Disable QR modal to prevent external API calls
-      qrModalOptions: {
-        themeMode: "dark",
-        themeVariables: {
-          "--wcm-z-index": "9999",
-          "--wcm-accent-color": "#dc2626",
-        },
-      },
-      metadata: {
-        name: "Crypto Payment Platform",
-        description: "Professional USDT Payment Platform",
-        url:
-          typeof window !== "undefined"
-            ? window.location.origin
-            : "http://localhost:3000",
-        icons: ["/icons/icon-192x192.png"],
-      },
-    }),
+    // Only add WalletConnect if project ID is available
+    ...(isWalletConnectConfigured()
+      ? [
+          walletConnect({
+            projectId: env.WALLETCONNECT_PROJECT_ID,
+            showQrModal: false, // Disable QR modal to prevent external API calls
+            qrModalOptions: {
+              themeMode: "dark",
+              themeVariables: {
+                "--wcm-z-index": "9999",
+                "--wcm-accent-color": "#dc2626",
+              },
+            },
+            metadata: {
+              name: "Crypto Payment Platform",
+              description: "Professional USDT Payment Platform",
+              url: env.BASE_URL,
+              icons: ["/icons/icon-192x192.png"],
+            },
+          }),
+        ]
+      : []),
   ],
   transports: {
     [mainnet.id]: http(),

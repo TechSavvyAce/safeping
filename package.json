@@ -12,6 +12,7 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest --watch",
+    "setup:env": "node scripts/setup-env.js",
     "db:migrate": "node scripts/db.js migrate",
     "db:status": "node scripts/db.js status",
     "db:rollback": "node scripts/db.js rollback",

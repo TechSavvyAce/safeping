@@ -9,6 +9,7 @@ import { I18nProvider } from "@/components/providers/I18nProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { WalletProvider } from "@/components/providers/WalletProvider";
 import { Web3ModalProvider } from "@/components/providers/Web3ModalProvider";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 
 const inter = Inter({ subsets: ["latin"] });
 const notoSansSC = Noto_Sans_SC({
@@ -127,10 +128,12 @@ export default function RootLayout({
           <I18nProvider>
             <WalletProvider>
               <Web3ModalProvider>
-                {/* Global wrapper with dark mode support */}
-                <div className="min-h-full bg-white dark:bg-gray-900 transition-colors duration-200">
-                  {children}
-                </div>
+                <ErrorBoundary>
+                  {/* Global wrapper with dark mode support */}
+                  <div className="min-h-full bg-white dark:bg-gray-900 transition-colors duration-200">
+                    {children}
+                  </div>
+                </ErrorBoundary>
               </Web3ModalProvider>
             </WalletProvider>
           </I18nProvider>

@@ -11,8 +11,17 @@ import { PaymentStatus } from "@/components/payment/PaymentStatus";
 import { PaymentTimer } from "@/components/payment/PaymentTimer";
 import { NetworkIndicator } from "@/components/ui/NetworkIndicator";
 import { QRCode } from "@/components/ui/QRCode";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 
 export default function PaymentPage() {
+  return (
+    <ErrorBoundary>
+      <PaymentPageContent />
+    </ErrorBoundary>
+  );
+}
+
+function PaymentPageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const paymentId = params.id as string;
@@ -33,26 +42,38 @@ export default function PaymentPage() {
   const isMobileWalletUser = urlWallet && urlChain;
 
   useEffect(() => {
-    if (isMobileWalletUser) {
-      setSelectedChain(urlChain);
-      setSelectedWallet(urlWallet);
+    try {
+      if (isMobileWalletUser) {
+        setSelectedChain(urlChain);
+        setSelectedWallet(urlWallet);
+      }
+    } catch (error) {
+      console.error("Error setting mobile wallet user:", error);
     }
   }, [isMobileWalletUser, urlChain, urlWallet]);
 
   useEffect(() => {
-    if (selectedChain === "tron" && selectedWallet === "metamask") {
-      setSelectedWallet("tronlink");
-    } else if (
-      (selectedChain === "ethereum" || selectedChain === "bsc") &&
-      selectedWallet === "tronlink"
-    ) {
-      setSelectedWallet("metamask");
+    try {
+      if (selectedChain === "tron" && selectedWallet === "metamask") {
+        setSelectedWallet("tronlink");
+      } else if (
+        (selectedChain === "ethereum" || selectedChain === "bsc") &&
+        selectedWallet === "tronlink"
+      ) {
+        setSelectedWallet("metamask");
+      }
+    } catch (error) {
+      console.error("Error updating wallet selection:", error);
     }
   }, [selectedChain, selectedWallet]);
 
   useEffect(() => {
-    const targetLanguage = payment?.language || "zh";
-    i18n.changeLanguage(targetLanguage);
+    try {
+      const targetLanguage = payment?.language || "zh";
+      i18n.changeLanguage(targetLanguage);
+    } catch (error) {
+      console.error("Error changing language:", error);
+    }
   }, [payment]);
 
   const connectWallet = async () => {
@@ -71,19 +92,25 @@ export default function PaymentPage() {
         }
       } else {
         if (win.ethereum) {
-          const provider = new (await import("ethers")).BrowserProvider(
-            win.ethereum
-          );
-          const signer = await provider.getSigner();
-          const address = await signer.getAddress();
-          setWalletAddress(address);
-          setIsConnected(true);
+          try {
+            const provider = new (await import("ethers")).BrowserProvider(
+              win.ethereum
+            );
+            const signer = await provider.getSigner();
+            const address = await signer.getAddress();
+            setWalletAddress(address);
+            setIsConnected(true);
+          } catch (providerError) {
+            console.error("Provider error:", providerError);
+            alert("Failed to connect to wallet provider. Please try again.");
+          }
         } else {
           alert("Please install MetaMask wallet");
         }
       }
     } catch (error) {
-      alert("Failed to connect wallet");
+      console.error("Wallet connection error:", error);
+      alert("Failed to connect wallet. Please try again.");
     }
   };
 
@@ -108,57 +135,62 @@ export default function PaymentPage() {
       const win = window as any;
       let userAddress: string;
 
-      if (selectedWallet === "imtoken") {
-        if (selectedChain === "tron" && win.tronWeb?.ready) {
-          userAddress = win.tronWeb.defaultAddress.base58;
-        } else if (
-          (selectedChain === "ethereum" || selectedChain === "bsc") &&
-          win.ethereum
-        ) {
-          const provider = new (await import("ethers")).BrowserProvider(
+      try {
+        if (selectedWallet === "imtoken") {
+          if (selectedChain === "tron" && win.tronWeb?.ready) {
+            userAddress = win.tronWeb.defaultAddress.base58;
+          } else if (
+            (selectedChain === "ethereum" || selectedChain === "bsc") &&
             win.ethereum
-          );
-          const signer = await provider.getSigner();
-          userAddress = await signer.getAddress();
+          ) {
+            const provider = new (await import("ethers")).BrowserProvider(
+              win.ethereum
+            );
+            const signer = await provider.getSigner();
+            userAddress = await signer.getAddress();
+          } else {
+            throw new Error(
+              `${selectedWallet} wallet not detected. Please ensure you're using ${selectedWallet} app and have selected the correct network.`
+            );
+          }
+        } else if (selectedWallet === "metamask") {
+          if (win.ethereum) {
+            const provider = new (await import("ethers")).BrowserProvider(
+              win.ethereum
+            );
+            const signer = await provider.getSigner();
+            userAddress = await signer.getAddress();
+          } else {
+            throw new Error(
+              "MetaMask not detected. Please ensure you're using MetaMask mobile app."
+            );
+          }
+        } else if (selectedWallet === "tronlink") {
+          if (win.tronWeb?.ready) {
+            userAddress = win.tronWeb.defaultAddress.base58;
+          } else {
+            throw new Error(
+              "TronLink not detected. Please ensure you're using TronLink mobile app."
+            );
+          }
         } else {
-          throw new Error(
-            `${selectedWallet} wallet not detected. Please ensure you're using ${selectedWallet} app and have selected the correct network.`
-          );
+          if (win.ethereum) {
+            const provider = new (await import("ethers")).BrowserProvider(
+              win.ethereum
+            );
+            const signer = await provider.getSigner();
+            userAddress = await signer.getAddress();
+          } else if (win.tronWeb?.ready) {
+            userAddress = win.tronWeb.defaultAddress.base58;
+          } else {
+            throw new Error(
+              `Wallet ${selectedWallet} not detected. Please ensure your wallet app is properly connected.`
+            );
+          }
         }
-      } else if (selectedWallet === "metamask") {
-        if (win.ethereum) {
-          const provider = new (await import("ethers")).BrowserProvider(
-            win.ethereum
-          );
-          const signer = await provider.getSigner();
-          userAddress = await signer.getAddress();
-        } else {
-          throw new Error(
-            "MetaMask not detected. Please ensure you're using MetaMask mobile app."
-          );
-        }
-      } else if (selectedWallet === "tronlink") {
-        if (win.tronWeb?.ready) {
-          userAddress = win.tronWeb.defaultAddress.base58;
-        } else {
-          throw new Error(
-            "TronLink not detected. Please ensure you're using TronLink mobile app."
-          );
-        }
-      } else {
-        if (win.ethereum) {
-          const provider = new (await import("ethers")).BrowserProvider(
-            win.ethereum
-          );
-          const signer = await provider.getSigner();
-          userAddress = await signer.getAddress();
-        } else if (win.tronWeb?.ready) {
-          userAddress = win.tronWeb.defaultAddress.base58;
-        } else {
-          throw new Error(
-            `Wallet ${selectedWallet} not detected. Please ensure your wallet app is properly connected.`
-          );
-        }
+      } catch (walletError: any) {
+        console.error("Wallet detection error:", walletError);
+        throw new Error(`Wallet detection failed: ${walletError.message}`);
       }
 
       if (!userAddress) {
@@ -171,6 +203,7 @@ export default function PaymentPage() {
 
       // Mobile wallet payment will be handled by PaymentSteps component
     } catch (error: any) {
+      console.error("Mobile wallet payment error:", error);
       let errorMessage = "支付失败，请重试";
 
       if (
@@ -257,25 +290,34 @@ export default function PaymentPage() {
   }
 
   const generateQRCodeData = () => {
-    const baseUrl = `${window.location.origin}/pay/${paymentId}`;
-    const params = `chain=${selectedChain}&wallet=${selectedWallet}`;
+    try {
+      if (typeof window === "undefined") {
+        return "";
+      }
 
-    if (
-      selectedWallet === "metamask" &&
-      (selectedChain === "ethereum" || selectedChain === "bsc")
-    ) {
-      return `https://metamask.app.link/dapp/${baseUrl}?${params}`;
-    }
+      const baseUrl = `${window.location.origin}/pay/${paymentId}`;
+      const params = `chain=${selectedChain}&wallet=${selectedWallet}`;
 
-    if (selectedWallet === "tronlink") {
+      if (
+        selectedWallet === "metamask" &&
+        (selectedChain === "ethereum" || selectedChain === "bsc")
+      ) {
+        return `https://metamask.app.link/dapp/${baseUrl}?${params}`;
+      }
+
+      if (selectedWallet === "tronlink") {
+        return `${baseUrl}?${params}`;
+      }
+
+      if (selectedWallet === "imtoken") {
+        return `${baseUrl}?${params}`;
+      }
+
       return `${baseUrl}?${params}`;
+    } catch (error) {
+      console.error("Error generating QR code data:", error);
+      return "";
     }
-
-    if (selectedWallet === "imtoken") {
-      return `${baseUrl}?${params}`;
-    }
-
-    return `${baseUrl}?${params}`;
   };
 
   const qrCodeData = generateQRCodeData();
@@ -562,7 +604,15 @@ export default function PaymentPage() {
                     📱 移动端扫码支付
                   </h3>
                   <div className="flex justify-center">
-                    <QRCode value={qrCodeData} size={200} />
+                    {qrCodeData ? (
+                      <QRCode value={qrCodeData} size={200} />
+                    ) : (
+                      <div className="w-[200px] h-[200px] bg-gray-700 rounded-lg flex items-center justify-center">
+                        <span className="text-gray-400 text-sm">
+                          QR码生成中...
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {selectedWallet === "metamask" && (
