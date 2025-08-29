@@ -3,6 +3,7 @@
 // =================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit, createRateLimitResponse } from "@/lib/rate-limit";
 
 export function middleware(request: NextRequest) {
   const startTime = Date.now();
@@ -19,7 +20,7 @@ export function middleware(request: NextRequest) {
   const duration = Date.now() - startTime;
 
   // Apply rate limiting
-  const rateLimitResult = rateLimit(request, "middleware");
+  const rateLimitResult = rateLimit(request, "api");
   if (!rateLimitResult.success) {
     return createRateLimitResponse(
       rateLimitResult.limit,
