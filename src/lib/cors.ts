@@ -3,7 +3,11 @@
 // =================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { isDevelopment } from "./env-validation";
+
+// Simple development check
+function isDevelopment(): boolean {
+  return process.env.NODE_ENV === "development";
+}
 
 export function corsHeaders(origin?: string): Record<string, string> {
   const isDev = isDevelopment();

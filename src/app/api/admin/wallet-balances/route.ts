@@ -3,7 +3,7 @@
 // =================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthHeaders } from "../../../../lib/auth";
+
 import { getWalletBalances } from "../../../../lib/database";
 import { logger } from "../../../../lib/logger";
 import { AdminWalletBalance } from "../../../../types";
@@ -11,9 +11,18 @@ import { ethers } from "ethers";
 
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
-    const authResult = await getAuthHeaders(request);
-    if (!authResult.success) {
+    // Check authentication using query parameters
+    const { searchParams } = new URL(request.url);
+    const username = searchParams.get("username");
+    const password = searchParams.get("password");
+
+    // Check credentials against environment variables
+    if (
+      !username ||
+      !password ||
+      username !== process.env.ADMIN_USERNAME ||
+      password !== process.env.ADMIN_PASSWORD
+    ) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

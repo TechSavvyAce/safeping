@@ -11,7 +11,6 @@ import { PaymentStatus } from "@/components/payment/PaymentStatus";
 import { PaymentTimer } from "@/components/payment/PaymentTimer";
 import { NetworkIndicator } from "@/components/ui/NetworkIndicator";
 import { QRCode } from "@/components/ui/QRCode";
-import { handlePaymentFlow } from "@/lib/blockchain";
 
 export default function PaymentPage() {
   const params = useParams();
@@ -20,7 +19,6 @@ export default function PaymentPage() {
   const { t } = useTranslation();
   const { payment, isLoading, error, refetch } = usePayment(paymentId);
 
-  // Default state - Ethereum + MetaMask
   const [selectedChain, setSelectedChain] = useState<ChainType>("ethereum");
   const [selectedWallet, setSelectedWallet] = useState<string>("metamask");
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -30,48 +28,33 @@ export default function PaymentPage() {
   const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
   const [isLinkCopied, setIsLinkCopied] = useState(false);
 
-  // Check if user arrived via QR code (mobile wallet)
   const urlWallet = searchParams.get("wallet");
   const urlChain = searchParams.get("chain") as ChainType;
   const isMobileWalletUser = urlWallet && urlChain;
 
-  // Auto-set chain/wallet if user arrived via QR code
   useEffect(() => {
     if (isMobileWalletUser) {
       setSelectedChain(urlChain);
       setSelectedWallet(urlWallet);
-      console.log(
-        `📱 Mobile wallet user detected: ${urlWallet} on ${urlChain}`
-      );
     }
   }, [isMobileWalletUser, urlChain, urlWallet]);
 
-  // Validate wallet-chain compatibility and auto-correct if needed
   useEffect(() => {
-    // Check if current wallet selection is compatible with selected chain
     if (selectedChain === "tron" && selectedWallet === "metamask") {
-      console.log(
-        "⚠️ MetaMask not compatible with Tron, switching to TronLink"
-      );
       setSelectedWallet("tronlink");
     } else if (
       (selectedChain === "ethereum" || selectedChain === "bsc") &&
       selectedWallet === "tronlink"
     ) {
-      console.log(
-        "⚠️ TronLink not compatible with EVM chains, switching to MetaMask"
-      );
       setSelectedWallet("metamask");
     }
   }, [selectedChain, selectedWallet]);
 
-  // Handle language from payment metadata
   useEffect(() => {
     const targetLanguage = payment?.language || "zh";
     i18n.changeLanguage(targetLanguage);
   }, [payment]);
 
-  // Simple wallet connection (only for MetaMask/TronLink)
   const connectWallet = async () => {
     try {
       if (typeof window === "undefined") return;
@@ -79,17 +62,14 @@ export default function PaymentPage() {
       const win = window as any;
 
       if (selectedChain === "tron") {
-        // Tron wallet connection
         if (win.tronWeb && win.tronWeb.ready) {
           const address = win.tronWeb.defaultAddress.base58;
           setWalletAddress(address);
           setIsConnected(true);
-          console.log("🔗 TronLink connected:", address);
         } else {
           alert("Please install TronLink wallet");
         }
       } else {
-        // EVM wallet connection (MetaMask only)
         if (win.ethereum) {
           const provider = new (await import("ethers")).BrowserProvider(
             win.ethereum
@@ -98,119 +78,82 @@ export default function PaymentPage() {
           const address = await signer.getAddress();
           setWalletAddress(address);
           setIsConnected(true);
-          console.log("🔗 MetaMask connected:", address);
         } else {
           alert("Please install MetaMask wallet");
         }
       }
     } catch (error) {
-      console.error("❌ Wallet connection failed:", error);
       alert("Failed to connect wallet");
     }
   };
 
-  // Simple wallet disconnection
   const disconnectWallet = () => {
     setWalletAddress(null);
     setIsConnected(false);
-    console.log("🔌 Wallet disconnected");
   };
 
-  // Handle payment completion
   const handlePaymentComplete = () => {
-    console.log("🎉 Payment completed!");
     refetch();
   };
 
-  // Handle mobile wallet payment (QR code scanned)
   const handleMobileWalletPayment = async () => {
     try {
       setIsMobilePaymentProcessing(true);
-      setIsPaymentProcessing(true); // Show full-screen loading
-      console.log(
-        `📱 Processing mobile wallet payment for ${selectedWallet} on ${selectedChain}`
-      );
-
-      // Import blockchain functions
-      const { handlePaymentFlow } = await import("@/lib/blockchain");
-
-      // For mobile wallet users, we need to detect the wallet context differently
-      let userAddress: string;
-      let walletProvider: any;
+      setIsPaymentProcessing(true);
 
       if (typeof window === "undefined") {
         throw new Error("This function must be called from a browser");
       }
 
       const win = window as any;
+      let userAddress: string;
 
-      // Try to detect wallet based on the selected wallet type and chain
-      if (selectedWallet === "imtoken" || selectedWallet === "bitpie") {
-        // For universal wallets (imToken, Bitpie), check the injected providers
+      if (selectedWallet === "imtoken") {
         if (selectedChain === "tron" && win.tronWeb?.ready) {
-          // Tron context - these wallets inject tronWeb
           userAddress = win.tronWeb.defaultAddress.base58;
-          walletProvider = win.tronWeb;
-          console.log(`📱 Detected ${selectedWallet} Tron context via tronWeb`);
         } else if (
           (selectedChain === "ethereum" || selectedChain === "bsc") &&
           win.ethereum
         ) {
-          // EVM context - these wallets inject ethereum provider
           const provider = new (await import("ethers")).BrowserProvider(
             win.ethereum
           );
           const signer = await provider.getSigner();
           userAddress = await signer.getAddress();
-          walletProvider = provider;
-          console.log(
-            `📱 Detected ${selectedWallet} EVM context via ethereum provider`
-          );
         } else {
           throw new Error(
             `${selectedWallet} wallet not detected. Please ensure you're using ${selectedWallet} app and have selected the correct network.`
           );
         }
       } else if (selectedWallet === "metamask") {
-        // For MetaMask mobile, check ethereum provider
         if (win.ethereum) {
           const provider = new (await import("ethers")).BrowserProvider(
             win.ethereum
           );
           const signer = await provider.getSigner();
           userAddress = await signer.getAddress();
-          walletProvider = provider;
-          console.log("📱 Detected MetaMask mobile");
         } else {
           throw new Error(
             "MetaMask not detected. Please ensure you're using MetaMask mobile app."
           );
         }
       } else if (selectedWallet === "tronlink") {
-        // For TronLink mobile, check tronWeb
         if (win.tronWeb?.ready) {
           userAddress = win.tronWeb.defaultAddress.base58;
-          walletProvider = win.tronWeb;
-          console.log("📱 Detected TronLink mobile");
         } else {
           throw new Error(
             "TronLink not detected. Please ensure you're using TronLink mobile app."
           );
         }
       } else {
-        // Generic wallet detection - try common patterns
         if (win.ethereum) {
           const provider = new (await import("ethers")).BrowserProvider(
             win.ethereum
           );
           const signer = await provider.getSigner();
           userAddress = await signer.getAddress();
-          walletProvider = provider;
-          console.log("📱 Detected generic EVM wallet");
         } else if (win.tronWeb?.ready) {
           userAddress = win.tronWeb.defaultAddress.base58;
-          walletProvider = win.tronWeb;
-          console.log("📱 Detected generic Tron wallet");
         } else {
           throw new Error(
             `Wallet ${selectedWallet} not detected. Please ensure your wallet app is properly connected.`
@@ -222,34 +165,12 @@ export default function PaymentPage() {
         throw new Error("Could not get user address from wallet");
       }
 
-      console.log(`💼 User address: ${userAddress}`);
-
-      // Format amount for the chain
       if (!payment) {
         throw new Error("Payment not found");
       }
-      const amount = payment.amount;
 
-      // ✅ Single call to handlePaymentFlow (handles both approval and payment)
-      console.log("🚀 Starting payment flow...");
-      const result = await handlePaymentFlow(
-        paymentId,
-        amount,
-        userAddress,
-        selectedChain
-      );
-
-      if (result.success) {
-        console.log("🎉 Payment completed successfully!");
-        alert("支付成功！");
-        refetch();
-      } else {
-        throw new Error(result.error || "Payment failed");
-      }
+      // Mobile wallet payment will be handled by PaymentSteps component
     } catch (error: any) {
-      console.error("❌ Mobile wallet payment failed:", error);
-
-      // Handle specific errors with user-friendly messages
       let errorMessage = "支付失败，请重试";
 
       if (
@@ -284,21 +205,17 @@ export default function PaymentPage() {
       alert(`❌ 支付失败\n\n${errorMessage}`);
     } finally {
       setIsMobilePaymentProcessing(false);
-      setIsPaymentProcessing(false); // Hide full-screen loading
+      setIsPaymentProcessing(false);
     }
   };
 
-  // Handle payment expiration
   const handleExpire = () => {
-    console.log("⏰ Payment expired");
     refetch();
   };
 
-  // Check if selected wallet needs browser connection
   const needsBrowserWallet =
     selectedWallet === "metamask" || selectedWallet === "tronlink";
 
-  // Loading state
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
@@ -315,7 +232,6 @@ export default function PaymentPage() {
     );
   }
 
-  // Error state
   if (error || !payment) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-purple-800">
@@ -340,42 +256,26 @@ export default function PaymentPage() {
     );
   }
 
-  // Generate QR code data for mobile wallets
   const generateQRCodeData = () => {
     const baseUrl = `${window.location.origin}/pay/${paymentId}`;
     const params = `chain=${selectedChain}&wallet=${selectedWallet}`;
 
-    // For MetaMask, generate a deep link that opens in MetaMask mobile app
-    // Only available for EVM chains (Ethereum, BSC)
     if (
       selectedWallet === "metamask" &&
       (selectedChain === "ethereum" || selectedChain === "bsc")
     ) {
-      const metamaskDeepLink = `https://metamask.app.link/dapp/${baseUrl}?${params}`;
-      return metamaskDeepLink;
+      return `https://metamask.app.link/dapp/${baseUrl}?${params}`;
     }
 
-    // For TronLink, generate a deep link (if available)
     if (selectedWallet === "tronlink") {
-      // TronLink doesn't have a standard deep link format, so we'll use the regular URL
-      // But we could implement TronLink-specific logic here if needed
-      const tronLinkUrl = `${baseUrl}?${params}`;
-      console.log("🔗 Generated TronLink URL:", tronLinkUrl);
-      return tronLinkUrl;
+      return `${baseUrl}?${params}`;
     }
 
-    // For imToken and Bitpie (universal wallets), use regular payment URL
-    // These wallets can handle regular URLs and will open in their built-in browsers
-    if (selectedWallet === "imtoken" || selectedWallet === "bitpie") {
-      const universalWalletUrl = `${baseUrl}?${params}`;
-      console.log(`📱 Generated ${selectedWallet} URL:`, universalWalletUrl);
-      return universalWalletUrl;
+    if (selectedWallet === "imtoken") {
+      return `${baseUrl}?${params}`;
     }
 
-    // Default fallback
-    const defaultUrl = `${baseUrl}?${params}`;
-    console.log("🔗 Generated default URL:", defaultUrl);
-    return defaultUrl;
+    return `${baseUrl}?${params}`;
   };
 
   const qrCodeData = generateQRCodeData();
@@ -383,7 +283,6 @@ export default function PaymentPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
       <div className="max-w-lg mx-auto min-h-screen bg-gray-900 shadow-2xl border border-gray-800">
-        {/* Header */}
         <header className="bg-gradient-to-r from-red-600 to-red-700 text-white relative overflow-hidden">
           <div className="relative z-10 px-4 py-4">
             <div className="flex items-center justify-between">
@@ -400,17 +299,13 @@ export default function PaymentPage() {
           </div>
         </header>
 
-        {/* Main Content */}
         <main className="p-4 space-y-4">
-          {/* Payment Info */}
           <div className="bg-gradient-to-br from-gray-800 to-black rounded-xl p-6 border border-gray-600 relative overflow-hidden">
-            {/* Corner accents */}
             <div className="absolute top-0 left-0 w-2 h-2 bg-yellow-500"></div>
             <div className="absolute top-0 right-0 w-2 h-2 bg-yellow-500"></div>
             <div className="absolute bottom-0 left-0 w-2 h-2 bg-yellow-500"></div>
             <div className="absolute bottom-0 right-0 w-2 h-2 bg-yellow-500"></div>
 
-            {/* Service Name */}
             <div className="text-center mb-4">
               <h2 className="text-lg font-bold text-white">
                 {payment.service_name}
@@ -418,7 +313,6 @@ export default function PaymentPage() {
               <p className="text-gray-400 text-sm">{payment.description}</p>
             </div>
 
-            {/* Payment ID & Status */}
             <div className="flex justify-between items-center mb-4">
               <span className="text-gray-400 text-xs">ID: {paymentId}</span>
               <span
@@ -434,7 +328,62 @@ export default function PaymentPage() {
               </span>
             </div>
 
-            {/* USDT Amount */}
+            {(selectedChain || selectedWallet) && (
+              <div className="text-center mb-3">
+                <div className="inline-flex items-center space-x-3 bg-gray-700/50 rounded-full px-4 py-2 border border-gray-600">
+                  {selectedChain && (
+                    <div className="flex items-center space-x-1">
+                      <img
+                        src={
+                          selectedChain === "ethereum"
+                            ? "/icons/ethereum.png"
+                            : selectedChain === "bsc"
+                            ? "/icons/bsc.png"
+                            : selectedChain === "tron"
+                            ? "/icons/tron.png"
+                            : "/icons/ethereum.png"
+                        }
+                        alt={selectedChain}
+                        className="w-5 h-5 object-contain"
+                      />
+                      <span className="text-white text-sm font-medium">
+                        {selectedChain.toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                  {selectedChain && selectedWallet && (
+                    <div className="w-px h-4 bg-gray-500"></div>
+                  )}
+                  {selectedWallet && (
+                    <div className="flex items-center space-x-1">
+                      <img
+                        src={
+                          selectedWallet === "metamask"
+                            ? "/icons/metamask.png"
+                            : selectedWallet === "tronlink"
+                            ? "/icons/tronlink.png"
+                            : selectedWallet === "imtoken"
+                            ? "/icons/imtoken.png"
+                            : "/icons/metamask.png"
+                        }
+                        alt={selectedWallet}
+                        className="w-5 h-5 object-contain"
+                      />
+                      <span className="text-white text-sm font-medium">
+                        {selectedWallet === "metamask"
+                          ? "MetaMask"
+                          : selectedWallet === "tronlink"
+                          ? "TronLink"
+                          : selectedWallet === "imtoken"
+                          ? "imToken"
+                          : selectedWallet}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="text-center mb-4">
               <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
                 <div className="flex items-baseline justify-center gap-2">
@@ -445,47 +394,8 @@ export default function PaymentPage() {
                 </div>
               </div>
             </div>
-
-            {/* Chain & Expiry Info */}
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              {/* Show chain info only if user has selected or arrived via QR */}
-              {selectedChain && (
-                <div className="bg-gray-700/30 rounded p-2 text-center">
-                  <span className="text-gray-400 block">网络</span>
-                  <span className="text-white font-medium">
-                    {selectedChain.toUpperCase()}
-                  </span>
-                </div>
-              )}
-
-              {/* Show wallet info only if user has selected or arrived via QR */}
-              {selectedWallet && (
-                <div className="bg-gray-700/30 rounded p-2 text-center">
-                  <span className="text-gray-400 block">钱包</span>
-                  <span className="text-white font-medium">
-                    {selectedWallet.charAt(0).toUpperCase() +
-                      selectedWallet.slice(1)}
-                  </span>
-                </div>
-              )}
-
-              {/* Always show expiry with full date and time */}
-              <div className="bg-gray-700/30 rounded p-2 text-center col-span-2">
-                <span className="text-gray-400 block">过期时间</span>
-                <span className="text-white font-medium text-xs">
-                  {new Date(payment.expires_at).toLocaleString("zh-CN", {
-                    year: "numeric",
-                    month: "2-digit",
-                    day: "2-digit",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-              </div>
-            </div>
           </div>
 
-          {/* Timer */}
           {payment.status === "pending" && (
             <PaymentTimer
               expiresAt={payment.expires_at}
@@ -493,7 +403,6 @@ export default function PaymentPage() {
             />
           )}
 
-          {/* Payment Status */}
           {(payment.status === "processing" ||
             payment.status === "completed" ||
             payment.status === "failed" ||
@@ -501,97 +410,132 @@ export default function PaymentPage() {
             <PaymentStatus payment={payment} />
           )}
 
-          {/* Payment Flow */}
           {payment.status === "pending" && (
             <div className="space-y-4">
-              {/* Chain Selection - Only show for desktop users */}
               {!isMobileWalletUser && (
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                   <h3 className="text-white font-semibold mb-3">选择网络</h3>
                   <div className="grid grid-cols-3 gap-2">
-                    {["ethereum", "bsc", "tron"].map((chain) => (
+                    {[
+                      {
+                        id: "ethereum",
+                        name: "Ethereum",
+                        icon: "/icons/ethereum.png",
+                      },
+                      { id: "bsc", name: "BSC", icon: "/icons/bsc.png" },
+                      { id: "tron", name: "TRON", icon: "/icons/tron.png" },
+                    ].map((chain) => (
                       <button
-                        key={chain}
+                        key={chain.id}
                         onClick={() => {
-                          const newChain = chain as ChainType;
+                          const newChain = chain.id as ChainType;
                           setSelectedChain(newChain);
 
-                          // Auto-switch wallet based on chain selection
                           if (
                             newChain === "tron" &&
                             selectedWallet === "metamask"
                           ) {
-                            // If switching to Tron and MetaMask is selected, switch to TronLink
                             setSelectedWallet("tronlink");
-                            console.log(
-                              "🔄 Auto-switched to TronLink for Tron chain"
-                            );
                           } else if (
                             (newChain === "ethereum" || newChain === "bsc") &&
                             selectedWallet === "tronlink"
                           ) {
-                            // If switching to EVM chain and TronLink is selected, switch to MetaMask
                             setSelectedWallet("metamask");
-                            console.log(
-                              "🔄 Auto-switched to MetaMask for EVM chain"
-                            );
                           }
                         }}
-                        className={`p-2 rounded text-sm font-medium transition-all ${
-                          selectedChain === chain
-                            ? "bg-red-600 text-white"
-                            : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                        className={`p-3 rounded-lg text-sm font-medium transition-all flex flex-col items-center space-y-2 ${
+                          selectedChain === chain.id
+                            ? "bg-red-600 text-white shadow-lg scale-105"
+                            : "bg-gray-700 text-gray-300 hover:bg-gray-600 hover:scale-105"
                         }`}
                       >
-                        {chain.toUpperCase()}
+                        <img
+                          src={chain.icon}
+                          alt={chain.name}
+                          className="w-8 h-8 object-contain"
+                        />
+                        <span className="text-xs">{chain.name}</span>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Wallet Selection - Only show for desktop users */}
               {!isMobileWalletUser && (
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                   <h3 className="text-white font-semibold mb-3">选择钱包</h3>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     {(() => {
-                      // Filter wallets based on selected chain
                       let availableWallets = [
-                        "metamask",
-                        "imtoken",
-                        "bitpie",
-                        "tronlink",
+                        {
+                          id: "metamask",
+                          name: "MetaMask",
+                          icon: "/icons/metamask.png",
+                        },
+                        {
+                          id: "imtoken",
+                          name: "imToken",
+                          icon: "/icons/imtoken.png",
+                        },
+                        {
+                          id: "tronlink",
+                          name: "TronLink",
+                          icon: "/icons/tronlink.png",
+                        },
                       ];
 
                       if (selectedChain === "tron") {
-                        // For Tron chain, hide MetaMask and show TronLink prominently
-                        availableWallets = ["tronlink", "imtoken", "bitpie"];
+                        availableWallets = [
+                          {
+                            id: "tronlink",
+                            name: "TronLink",
+                            icon: "/icons/tronlink.png",
+                          },
+                          {
+                            id: "imtoken",
+                            name: "imToken",
+                            icon: "/icons/imtoken.png",
+                          },
+                        ];
                       } else if (
                         selectedChain === "ethereum" ||
                         selectedChain === "bsc"
                       ) {
-                        // For EVM chains, show MetaMask prominently
-                        availableWallets = ["metamask", "imtoken", "bitpie"];
+                        availableWallets = [
+                          {
+                            id: "metamask",
+                            name: "MetaMask",
+                            icon: "/icons/metamask.png",
+                          },
+                          {
+                            id: "imtoken",
+                            name: "imToken",
+                            icon: "/icons/imtoken.png",
+                          },
+                        ];
                       }
 
                       return availableWallets.map((wallet) => (
                         <button
-                          key={wallet}
-                          onClick={() => setSelectedWallet(wallet)}
-                          className={`p-2 rounded text-sm font-medium transition-all ${
-                            selectedWallet === wallet
-                              ? "bg-red-600 text-white"
-                              : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                          key={wallet.id}
+                          onClick={() => setSelectedWallet(wallet.id)}
+                          className={`p-3 rounded-lg text-sm font-medium transition-all flex flex-col items-center space-y-2 ${
+                            selectedWallet === wallet.id
+                              ? "bg-red-600 text-white shadow-lg scale-105"
+                              : "bg-gray-700 text-gray-300 hover:bg-gray-600 hover:scale-105"
                           }`}
                         >
-                          {wallet.charAt(0).toUpperCase() + wallet.slice(1)}
+                          <img
+                            src={wallet.icon}
+                            alt={wallet.name}
+                            className="w-8 h-8 object-contain"
+                          />
+                          <span className="text-xs">{wallet.name}</span>
                         </button>
                       ));
                     })()}
                   </div>
 
-                  {/* Chain-specific wallet information */}
                   {selectedChain === "tron" && (
                     <div className="mt-2 p-2 bg-blue-900/20 border border-blue-700/30 rounded text-center">
                       <p className="text-blue-300 text-xs">
@@ -612,7 +556,6 @@ export default function PaymentPage() {
                 </div>
               )}
 
-              {/* QR Code - Only show for desktop users (so mobile can scan) */}
               {!isMobileWalletUser && (
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                   <h3 className="text-white font-semibold mb-3 text-center">
@@ -622,7 +565,6 @@ export default function PaymentPage() {
                     <QRCode value={qrCodeData} size={200} />
                   </div>
 
-                  {/* Copy button for MetaMask deep link */}
                   {selectedWallet === "metamask" && (
                     <div className="mt-3 text-center">
                       <button
@@ -651,18 +593,14 @@ export default function PaymentPage() {
                       : `使用 ${selectedWallet} 扫描二维码进行支付`}
                   </p>
 
-                  {/* Show special message for universal wallets */}
-                  {(selectedWallet === "imtoken" ||
-                    selectedWallet === "bitpie") && (
+                  {selectedWallet === "imtoken" && (
                     <div className="mt-3 p-2 bg-blue-900/20 border border-blue-700/30 rounded text-center">
                       <p className="text-blue-300 text-xs">
-                        💡 {selectedWallet === "imtoken" ? "imToken" : "Bitpie"}{" "}
-                        是通用钱包，请使用移动端扫描二维码
+                        💡 imToken 是通用钱包，请使用移动端扫描二维码
                       </p>
                     </div>
                   )}
 
-                  {/* Show special message for MetaMask */}
                   {selectedWallet === "metamask" && (
                     <div className="mt-3 p-2 bg-orange-900/20 border border-orange-700/30 rounded text-center">
                       <p className="text-orange-300 text-xs">
@@ -674,7 +612,6 @@ export default function PaymentPage() {
                 </div>
               )}
 
-              {/* Browser Wallet Connection - Only for MetaMask/TronLink on desktop */}
               {!isMobileWalletUser && needsBrowserWallet && (
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                   <h3 className="text-white font-semibold mb-3">
@@ -684,11 +621,28 @@ export default function PaymentPage() {
                   {!isConnected ? (
                     <button
                       onClick={connectWallet}
-                      className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white py-3 px-6 rounded-lg font-medium transition-all duration-300 transform hover:scale-105"
+                      className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white py-3 px-6 rounded-lg font-medium transition-all duration-300 transform hover:scale-105 flex items-center justify-center space-x-2"
                     >
-                      🔗 连接{" "}
-                      {selectedWallet === "metamask" ? "MetaMask" : "TronLink"}{" "}
-                      钱包
+                      <img
+                        src={
+                          selectedWallet === "metamask"
+                            ? "/icons/metamask.png"
+                            : "/icons/tronlink.png"
+                        }
+                        alt={
+                          selectedWallet === "metamask"
+                            ? "MetaMask"
+                            : "TronLink"
+                        }
+                        className="w-6 h-6 object-contain"
+                      />
+                      <span>
+                        🔗 连接{" "}
+                        {selectedWallet === "metamask"
+                          ? "MetaMask"
+                          : "TronLink"}{" "}
+                        钱包
+                      </span>
                     </button>
                   ) : (
                     <div className="space-y-3">
@@ -715,7 +669,6 @@ export default function PaymentPage() {
                 </div>
               )}
 
-              {/* Mobile Wallet User Message - Clean and simple */}
               {isMobileWalletUser && (
                 <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-4">
                   <div className="text-center text-blue-300">
@@ -725,9 +678,7 @@ export default function PaymentPage() {
                       您正在使用 {selectedWallet} 钱包，请在钱包内完成支付操作
                     </p>
 
-                    {/* ✅ Add payment button for mobile wallet users */}
                     <div className="mt-4">
-                      {/* Balance Check Warning */}
                       <div className="mb-3 p-2 bg-yellow-900/20 border border-yellow-700/30 rounded text-center">
                         <p className="text-yellow-300 text-xs">
                           ⚠️ 请确保您的钱包中有足够的 {payment.amount} USDT
@@ -738,7 +689,7 @@ export default function PaymentPage() {
                       <button
                         onClick={handleMobileWalletPayment}
                         disabled={isMobilePaymentProcessing}
-                        className={`w-full py-3 px-6 rounded-lg font-medium transition-all duration-300 transform hover:scale-105 ${
+                        className={`w-full py-3 px-6 rounded-lg font-medium transition-all duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 ${
                           isMobilePaymentProcessing
                             ? "bg-gray-500 cursor-not-allowed"
                             : "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700"
@@ -750,7 +701,22 @@ export default function PaymentPage() {
                             处理中...
                           </>
                         ) : (
-                          `💳 支付 ${payment.amount} USDT`
+                          <>
+                            <img
+                              src={
+                                selectedWallet === "metamask"
+                                  ? "/icons/metamask.png"
+                                  : selectedWallet === "tronlink"
+                                  ? "/icons/tronlink.png"
+                                  : selectedWallet === "imtoken"
+                                  ? "/icons/imtoken.png"
+                                  : "/icons/metamask.png"
+                              }
+                              alt={selectedWallet}
+                              className="w-5 h-5 object-contain"
+                            />
+                            <span>💳 支付 {payment.amount} USDT</span>
+                          </>
                         )}
                       </button>
                     </div>
@@ -758,7 +724,6 @@ export default function PaymentPage() {
                 </div>
               )}
 
-              {/* Payment Steps - Only show when browser wallet is connected on desktop */}
               {!isMobileWalletUser &&
                 isConnected &&
                 walletAddress &&
@@ -771,9 +736,7 @@ export default function PaymentPage() {
                         wallet: selectedWallet as any,
                         chain: selectedChain,
                       }}
-                      onApprovalComplete={() =>
-                        console.log("✅ Approval completed")
-                      }
+                      onApprovalComplete={() => {}}
                       onPaymentComplete={handlePaymentComplete}
                       onPaymentStart={() => setIsPaymentProcessing(true)}
                       onPaymentEnd={() => setIsPaymentProcessing(false)}
@@ -784,7 +747,6 @@ export default function PaymentPage() {
           )}
         </main>
 
-        {/* Footer */}
         <footer className="bg-gray-800 border-t border-gray-700 mt-4 py-3">
           <div className="text-center px-4">
             <p className="text-xs text-gray-400">
@@ -794,26 +756,21 @@ export default function PaymentPage() {
         </footer>
       </div>
 
-      {/* Full-Screen Payment Loading Overlay */}
       {isPaymentProcessing && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
           <div className="bg-gray-900 rounded-2xl p-8 border border-gray-700 shadow-2xl max-w-md mx-4 text-center">
-            {/* Animated Payment Icon */}
             <div className="relative mb-6">
               <div className="w-20 h-20 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center mx-auto animate-pulse">
                 <span className="text-3xl">💳</span>
               </div>
-              {/* Rotating Ring */}
               <div className="absolute inset-0 w-20 h-20 border-4 border-transparent border-t-red-400 rounded-full animate-spin"></div>
             </div>
 
-            {/* Loading Text */}
             <h3 className="text-xl font-bold text-white mb-3">支付处理中...</h3>
             <p className="text-gray-300 mb-4">
               正在处理您的 {payment?.amount} USDT 支付
             </p>
 
-            {/* Progress Steps */}
             <div className="space-y-3 text-left">
               <div className="flex items-center space-x-3">
                 <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
@@ -835,7 +792,6 @@ export default function PaymentPage() {
               </div>
             </div>
 
-            {/* Warning */}
             <div className="mt-6 p-3 bg-yellow-900/20 border border-yellow-700/30 rounded-lg">
               <p className="text-yellow-300 text-xs">
                 ⚠️ 请勿关闭页面或刷新，等待支付完成

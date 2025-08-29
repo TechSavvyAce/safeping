@@ -542,34 +542,125 @@ class Database {
     await this.ensureInitialized();
     if (!this.db) throw new Error("Database not initialized");
 
-    // Get unique wallet addresses
-    const walletAddresses = await this.getUniqueWalletAddresses();
+    const all = (sql: string, params?: any[]) => {
+      return new Promise<any[]>((resolve, reject) => {
+        if (params) {
+          this.db!.all(sql, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+          });
+        } else {
+          this.db!.all(sql, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+          });
+        }
+      });
+    };
 
-    // Filter out wallets with null chain and get payment stats for each valid wallet
-    const walletBalances = await Promise.all(
-      walletAddresses
-        .filter((wallet) => wallet.chain !== null) // Filter out null chains
-        .map(async (wallet) => {
-          const stats = await this.getWalletPaymentStats(
-            wallet.address,
-            wallet.chain!
-          );
+    // Get wallets from the dedicated wallets table
+    const wallets = await all(`
+      SELECT 
+        address,
+        chain,
+        usdt_balance as usdtBalance,
+        payment_count as paymentCount,
+        connected_at as connectedAt,
+        last_activity as lastActivity,
+        status
+      FROM wallets 
+      WHERE status = 'active'
+      ORDER BY connected_at DESC
+    `);
 
-          // Generate mock balance data (in a real app, you'd fetch from blockchain)
-          const mockBalance = this.generateMockBalance(wallet.chain!, stats);
+    return wallets.map((wallet) => ({
+      address: wallet.address,
+      chain: wallet.chain,
+      balance: "0.00", // Native token balance (ETH/BNB/TRX)
+      usdtBalance: wallet.usdtBalance || "0.00",
+      paymentCount: wallet.paymentCount || 0,
+      lastActivity: wallet.lastActivity,
+    }));
+  }
 
-          return {
-            address: wallet.address,
-            chain: wallet.chain!,
-            balance: mockBalance.native,
-            usdtBalance: mockBalance.usdt,
-            paymentCount: stats.total,
-            lastActivity: stats.lastPaymentDate,
-          };
-        })
+  // Save or update wallet information
+  async saveWallet(walletData: {
+    address: string;
+    chain: string;
+    usdtBalance?: string;
+  }): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    const run = (sql: string, params?: any[]) => {
+      return new Promise<any>((resolve, reject) => {
+        if (params) {
+          this.db!.run(sql, params, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+          });
+        } else {
+          this.db!.run(sql, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+          });
+        }
+      });
+    };
+
+    // Insert or update wallet (upsert)
+    await run(
+      `
+      INSERT INTO wallets (address, chain, usdt_balance, last_activity)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(address) DO UPDATE SET
+        chain = excluded.chain,
+        usdt_balance = excluded.usdt_balance,
+        last_activity = CURRENT_TIMESTAMP,
+        payment_count = payment_count + 1
+    `,
+      [walletData.address, walletData.chain, walletData.usdtBalance || "0.00"]
     );
 
-    return walletBalances;
+    logInfo(
+      `Wallet ${walletData.address} on ${walletData.chain} saved/updated`
+    );
+  }
+
+  // Update wallet USDT balance
+  async updateWalletBalance(
+    address: string,
+    usdtBalance: string
+  ): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    const run = (sql: string, params?: any[]) => {
+      return new Promise<any>((resolve, reject) => {
+        if (params) {
+          this.db!.run(sql, params, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+          });
+        } else {
+          this.db!.run(sql, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+          });
+        }
+      });
+    };
+
+    await run(
+      `
+      UPDATE wallets 
+      SET usdt_balance = ?, last_activity = CURRENT_TIMESTAMP
+      WHERE address = ?
+    `,
+      [usdtBalance, address]
+    );
+
+    logInfo(`Wallet ${address} balance updated to ${usdtBalance} USDT`);
   }
 
   // Helper function to generate realistic mock balances based on payment history

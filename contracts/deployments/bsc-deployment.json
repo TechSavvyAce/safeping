@@ -1,0 +1,11 @@
+{
+  "network": "BSC Mainnet",
+  "contract": "SafePing",
+  "address": "0xB6b8c0D260de8cc01610b88678a783f6039648b3",
+  "owner": "0x210A7912f569b5b372BC2C2150A1B7CE23980f87",
+  "usdtContract": "0x55d398326f99059fF775485246999027B3197955",
+  "chainId": "56",
+  "transactionHash": "0xb1276d3d8a551f522a776f002e532290115f8b6d12cad4e000f4d52259feff6a",
+  "deployer": "0x210A7912f569b5b372BC2C2150A1B7CE23980f87",
+  "deploymentTime": "2025-08-28T10:39:38.012Z"
+}

@@ -48,22 +48,6 @@ class TelegramService {
         process.env.NEXT_PUBLIC_TELEGRAM_CHANNEL_ID
       ),
     };
-
-    // Debug logging
-    console.log("🔍 Telegram config loaded:", {
-      hasToken: !!this.config.token,
-      hasChannelId: !!this.config.channelId,
-      isEnabled: this.config.isEnabled,
-      tokenPreview: this.config.token
-        ? `${this.config.token.substring(0, 10)}...`
-        : "Not set",
-      channelId: this.config.channelId || "Not set",
-      rawToken: this.config.token,
-      rawChannelId: this.config.channelId,
-      envKeys: Object.keys(process.env).filter((key) =>
-        key.includes("TELEGRAM")
-      ),
-    });
   }
 
   private ensureInitialized() {
@@ -77,7 +61,6 @@ class TelegramService {
    */
   private async sendMessage(message: TelegramMessage): Promise<boolean> {
     if (!this.config?.isEnabled) {
-      console.log("📱 Telegram notifications are disabled");
       return false;
     }
 
@@ -98,14 +81,11 @@ class TelegramService {
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error("❌ Telegram API error:", errorData);
         return false;
       }
 
-      console.log("✅ Telegram message sent successfully");
       return true;
     } catch (error) {
-      console.error("❌ Failed to send Telegram message:", error);
       return false;
     }
   }

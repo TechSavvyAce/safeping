@@ -1,0 +1,11 @@
+{
+  "network": "TRON Mainnet",
+  "contractName": "SafePing",
+  "contractAddress": "410d9a431b3f5e704e7f4cf570b4b1e4391c8088b1",
+  "deployerAddress": "TTuptMg5xuXy3kWvjU8DJKVPovPwcX1WFN",
+  "usdtAddress": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+  "chainId": 728126428,
+  "deploymentTime": "2025-08-29T00:53:43.119Z",
+  "trxBalance": "321.1816",
+  "tronScanUrl": "https://tronscan.org/#/contract/410d9a431b3f5e704e7f4cf570b4b1e4391c8088b1"
+}

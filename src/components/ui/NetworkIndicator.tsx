@@ -36,9 +36,23 @@ export function NetworkIndicator({
       try {
         const response = await fetch("/api/config");
         const config = await response.json();
-        // setNetworkInfo(config.network);
+        setNetworkInfo(config.network);
       } catch (error) {
         console.error("Failed to fetch network info:", error);
+        // Set default network info on error
+        setNetworkInfo({
+          mode: "mainnet",
+          isMainnet: true,
+          networks: [
+            {
+              chain: "ethereum",
+              name: "Ethereum",
+              explorer: "https://etherscan.io",
+            },
+            { chain: "bsc", name: "BSC", explorer: "https://bscscan.com" },
+            { chain: "tron", name: "TRON", explorer: "https://tronscan.org" },
+          ],
+        });
       } finally {
         setIsLoading(false);
       }

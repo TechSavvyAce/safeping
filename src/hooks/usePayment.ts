@@ -31,10 +31,7 @@ export function usePayment(paymentId: string): UsePaymentReturn {
 
       const paymentData = await response.json();
       setPayment(paymentData);
-
-      console.log("📄 Payment loaded:", paymentData);
     } catch (err: any) {
-      console.error("Failed to fetch payment:", err);
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -69,7 +66,6 @@ export function usePayment(paymentId: string): UsePaymentReturn {
         }
 
         const result = await response.json();
-        console.log("⚡ Payment processing started:", result);
 
         // Update local payment status
         if (payment) {
@@ -118,8 +114,6 @@ export function usePayment(paymentId: string): UsePaymentReturn {
               }
             : null
         );
-
-        console.log(`📊 Payment status updated: ${statusData.status}`);
       }
 
       return statusData;
@@ -157,7 +151,6 @@ export function usePayment(paymentId: string): UsePaymentReturn {
       // Set timeout to mark payment as expired
       const timeout = setTimeout(() => {
         setPayment((prev) => (prev ? { ...prev, status: "expired" } : null));
-        console.log("⏰ Payment expired");
       }, timeUntilExpiry);
 
       return () => clearTimeout(timeout);

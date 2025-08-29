@@ -1,0 +1,29 @@
+{
+  "name": "safeping-tron-deployment",
+  "version": "1.0.0",
+  "description": "Tron deployment scripts for SafePing contract",
+  "main": "scripts/deploy-tron.js",
+  "scripts": {
+    "deploy:tron": "node scripts/deploy-tron.js",
+    "test:tron": "node scripts/test-tron-deployed-contract.js",
+    "deploy:tron:testnet": "TRON_NETWORK=shasta node scripts/deploy-tron.js",
+    "test:tron:testnet": "TRON_NETWORK=shasta node scripts/test-tron-deployed-contract.js"
+  },
+  "dependencies": {
+    "tronweb": "^5.3.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {},
+  "keywords": [
+    "tron",
+    "blockchain",
+    "smart-contract",
+    "deployment",
+    "safeping"
+  ],
+  "author": "Lan John Hoang",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

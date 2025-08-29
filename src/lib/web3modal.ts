@@ -7,27 +7,9 @@ import { config } from "./wagmi";
 
 // Check if WalletConnect project ID is configured
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
-console.log(projectId);
-if (!projectId || projectId === "YOUR_WALLETCONNECT_PROJECT_ID") {
-  console.error("❌ WalletConnect Project ID not configured!");
-  console.error("🔧 To fix this issue:");
-  console.error("1. Go to https://cloud.walletconnect.com/");
-  console.error("2. Create a new project or use existing one");
-  console.error("3. Copy the Project ID");
-  console.error("4. Create a .env.local file in your project root");
-  console.error(
-    "5. Add: NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_actual_project_id"
-  );
-  console.error("6. Restart your development server");
-  console.error("");
-  console.error(
-    "⚠️  WalletConnect features will not work until you configure this!"
-  );
-  console.error(
-    "📱 Users will see connection errors when trying to connect wallets"
-  );
 
-  // Don't throw error, just warn and continue with placeholder
+if (!projectId || projectId === "YOUR_WALLETCONNECT_PROJECT_ID") {
+  // WalletConnect Project ID not configured
   // This allows the app to run but WalletConnect won't work
 }
 

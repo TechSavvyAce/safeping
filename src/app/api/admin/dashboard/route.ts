@@ -4,7 +4,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/database";
-import { blockchainService } from "@/lib/blockchain";
 import { rateLimit, createRateLimitResponse } from "@/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
@@ -35,8 +34,11 @@ export async function GET(request: NextRequest) {
     const stats = await db.getPaymentStats(30); // Last 30 days
     const recentStats = await db.getPaymentStats(1); // Last 24 hours
 
-    // Get network information
-    const networkInfo = blockchainService.getNetworkInfo();
+    // Simple network info since blockchainService.getNetworkInfo() no longer exists
+    const networkInfo = {
+      isMainnet: process.env.NEXT_PUBLIC_NETWORK_MODE === "mainnet",
+      networks: ["ethereum", "bsc", "tron"],
+    };
 
     // Debug logging
     console.log("🔍 Environment configuration:", {

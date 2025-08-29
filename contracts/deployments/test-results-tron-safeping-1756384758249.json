@@ -1,0 +1,11 @@
+{
+  "network": "TRON Mainnet",
+  "contractAddress": "TAEuq6UzXGgNRKg6dddcEJMASzX2LnyNGC",
+  "testTime": "2025-08-28T12:39:18.249Z",
+  "deployerAddress": "TTuptMg5xuXy3kWvjU8DJKVPovPwcX1WFN",
+  "owner": "41c4ce8e1a9c3a531fa93ba75db2b30e3a3dffc43f",
+  "usdtContract": "41a614f803b6fd780986a42c78ec9c7f77e6ded13c",
+  "chainId": "728126428",
+  "tronScanUrl": "https://tronscan.org/#/contract/TAEuq6UzXGgNRKg6dddcEJMASzX2LnyNGC",
+  "usdtScanUrl": "https://tronscan.org/#/address/TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+}

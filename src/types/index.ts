@@ -6,7 +6,7 @@
 export type ChainType = "ethereum" | "bsc" | "tron";
 
 // Wallet Types
-export type WalletType = "metamask" | "tronlink" | "imtoken" | "bitpie";
+export type WalletType = "metamask" | "tronlink" | "imtoken";
 
 // Payment Status
 export type PaymentStatus =

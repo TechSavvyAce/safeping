@@ -219,8 +219,6 @@ export function WalletSelector({
       return chainType === "ethereum" || chainType === "bsc";
     } else if (walletId === "tronlink") {
       return chainType === "tron";
-    } else if (walletId === "imtoken") {
-      return true; // WalletConnect supports all chains
     }
     return false;
   };
@@ -238,7 +236,6 @@ export function WalletSelector({
     // Map wallet IDs to readable names
     const walletMap: { [key: string]: string } = {
       metamask: "metamask",
-      imtoken: "imtoken",
       tronlink: "tronlink",
     };
 
@@ -256,11 +253,6 @@ export function WalletSelector({
     if (selectedWallet === "metamask") {
       // MetaMask deep link - opens MetaMask app and shows contract interaction
       return `https://metamask.app.link/dapp/${currentOrigin}${currentPath}?chain=${chainParam}&wallet=${walletParam}&action=connect&autoApprove=true`;
-    } else if (selectedWallet === "imtoken") {
-      // imToken deep link - opens imToken app with WalletConnect
-      return `imtokenv2://navigate/DappView?url=${encodeURIComponent(
-        `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=${walletParam}&connect=imtoken`
-      )}`;
     } else if (selectedWallet === "tronlink") {
       // TronLink deep link - opens TronLink app
       return `tronlinkoutside://navigate/DappView?url=${encodeURIComponent(
@@ -276,21 +268,7 @@ export function WalletSelector({
   const generateWalletConnectURI = () => {
     if (!selectedWallet || !localSelectedChain) return "";
 
-    // For imToken and Bitpie, generate WalletConnect URI
-    if (selectedWallet === "imtoken") {
-      const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
-      const chainId =
-        localSelectedChain === "ethereum"
-          ? 1
-          : localSelectedChain === "bsc"
-          ? 56
-          : 728126428;
-
-      return `wc:${projectId}@1?chainId=${chainId}&relay-protocol=irn&rpcUrl=${getRpcUrlForChain(
-        localSelectedChain
-      )}`;
-    }
-
+    // No WalletConnect wallets currently supported
     return "";
   };
 
@@ -315,13 +293,6 @@ export function WalletSelector({
       case "metamask":
         // MetaMask deep link - opens app and shows contract interaction
         return `https://metamask.app.link/dapp/${currentOrigin}${currentPath}?chain=${chainParam}&wallet=metamask&action=connect&autoApprove=true&source=qr`;
-
-      case "imtoken":
-        // imToken deep link - opens app with WalletConnect
-        const imtokenUrl = `${currentOrigin}${currentPath}?chain=${chainParam}&wallet=imtoken&connect=walletconnect&source=qr`;
-        return `imtokenv2://navigate/DappView?url=${encodeURIComponent(
-          imtokenUrl
-        )}`;
 
       case "tronlink":
         // TronLink deep link - opens app
@@ -448,7 +419,7 @@ export function WalletSelector({
                     ? "TronLink"
                     : selectedWallet === "imtoken"
                     ? "imToken"
-                    : "Bitpie"}
+                    : "imToken"}
                 </span>
               </div>
             </div>
@@ -461,10 +432,9 @@ export function WalletSelector({
         <div className="text-center mb-2">
           <span className="text-gray-400 text-xs">选择钱包</span>
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {[
             { id: "metamask", name: "MetaMask", icon: "/icons/metamask.png" },
-            { id: "imtoken", name: "imToken", icon: "/icons/imtoken.png" },
             { id: "tronlink", name: "TronLink", icon: "/icons/tronlink.png" },
           ].map((wallet) => {
             // Determine if wallet should be disabled based on selected chain
@@ -537,11 +507,11 @@ export function WalletSelector({
         <div className="mt-2 text-center">
           <p className="text-xs text-gray-500">
             {localSelectedChain === "tron" &&
-              "💡 Tron 网络不支持 MetaMask，请使用 TronLink、imToken 或 Bitpie"}
+              "💡 Tron 网络不支持 MetaMask，请使用 TronLink 或 imToken"}
             {localSelectedChain === "ethereum" &&
-              "💡 Ethereum 网络不支持 TronLink，请使用 MetaMask、imToken 或 Bitpie"}
+              "💡 Ethereum 网络不支持 TronLink，请使用 MetaMask 或 imToken"}
             {localSelectedChain === "bsc" &&
-              "💡 BSC 网络不支持 TronLink，请使用 MetaMask、imToken 或 Bitpie"}
+              "💡 BSC 网络不支持 TronLink，请使用 MetaMask 或 imToken"}
           </p>
         </div>
       </div>
@@ -589,9 +559,7 @@ export function WalletSelector({
             <div className="space-y-3">
               <div className="text-center mb-2">
                 <p className="text-blue-300 text-xs">
-                  📱 扫描后将在{" "}
-                  {selectedWallet === "imtoken" ? "imToken" : "Bitpie"}{" "}
-                  移动端打开
+                  📱 扫描后将在 imToken 移动端打开
                 </p>
                 <p className="text-gray-400 text-xs">
                   使用 WalletConnect 协议连接

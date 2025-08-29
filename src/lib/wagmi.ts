@@ -10,7 +10,7 @@ export const config = createConfig({
     injected(),
     metaMask(),
     walletConnect({
-      projectId,
+      projectId: projectId || "",
       showQrModal: false, // Disable QR modal to prevent external API calls
       qrModalOptions: {
         themeMode: "dark",
@@ -39,8 +39,6 @@ export const config = createConfig({
   }),
   // Add polling configuration for better connection stability
   pollingInterval: 4000,
-  // Disable auto-connect to prevent connection issues
-  autoConnect: false,
 });
 
 export { mainnet, bsc };
@@ -104,29 +102,3 @@ export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
 };
 
 // Helper function to get chain name by ID
-export function getChainName(chainId: number): string {
-  switch (chainId) {
-    case mainnet.id:
-      return mainnet.name;
-    case bsc.id:
-      return bsc.name;
-    case 728126428: // Tron
-      return "Tron";
-    default:
-      return `Chain ${chainId}`;
-  }
-}
-
-// Helper function to get USDT contract address by chain
-export function getUSDTContract(chainId: number): string | null {
-  switch (chainId) {
-    case 1: // Ethereum
-      return CHAIN_CONFIGS.ethereum.usdtContract;
-    case 56: // BSC
-      return CHAIN_CONFIGS.bsc.usdtContract;
-    case 728126428: // Tron
-      return CHAIN_CONFIGS.tron.usdtContract;
-    default:
-      return null;
-  }
-}

@@ -1,189 +1,241 @@
-{
-  "entrys": [
-    {
-      "inputs": [
-        { "name": "_treasury", "type": "address" },
-        { "name": "_usdtToken", "type": "address" }
-      ],
-      "stateMutability": "Nonpayable",
-      "type": "Constructor"
-    },
-    { "name": "EmptyString", "type": "Error" },
-    { "name": "InsufficientAllowance", "type": "Error" },
-    { "name": "InsufficientBalance", "type": "Error" },
-    { "name": "PaymentCompleted", "type": "Error" },
-    { "name": "PaymentIdExists", "type": "Error" },
-    { "name": "PaymentNotFound", "type": "Error" },
-    { "name": "Unauthorized", "type": "Error" },
-    { "name": "ZeroAddress", "type": "Error" },
-    { "name": "ZeroAmount", "type": "Error" },
-    {
-      "inputs": [
-        { "indexed": true, "name": "previousOwner", "type": "address" },
-        { "indexed": true, "name": "newOwner", "type": "address" }
-      ],
-      "name": "OwnershipTransferred",
-      "type": "Event"
-    },
-    {
-      "inputs": [
-        { "indexed": true, "name": "paymentHash", "type": "bytes32" },
-        { "indexed": true, "name": "payer", "type": "address" },
-        { "name": "amount", "type": "uint256" }
-      ],
-      "name": "PaymentProcessed",
-      "type": "Event"
-    },
-    {
-      "inputs": [
-        { "indexed": true, "name": "oldTreasury", "type": "address" },
-        { "indexed": true, "name": "newTreasury", "type": "address" }
-      ],
-      "name": "TreasuryUpdated",
-      "type": "Event"
-    },
-    {
-      "outputs": [{ "type": "address" }],
-      "name": "USDT",
-      "stateMutability": "View",
-      "type": "Function"
-    },
-    {
-      "outputs": [{ "type": "bool" }],
-      "inputs": [
-        { "name": "_user", "type": "address" },
-        { "name": "_amount", "type": "uint256" }
-      ],
-      "name": "checkAllowance",
-      "stateMutability": "View",
-      "type": "Function"
-    },
-    {
-      "outputs": [
-        { "name": "contractOwner", "type": "address" },
-        { "name": "treasuryAddress", "type": "address" },
-        { "name": "usdtAddress", "type": "address" }
-      ],
-      "name": "getContractInfo",
-      "stateMutability": "View",
-      "type": "Function"
-    },
-    {
-      "outputs": [
-        { "name": "payer", "type": "address" },
-        { "name": "amount", "type": "uint256" },
-        { "name": "timestamp", "type": "uint256" },
-        { "name": "completed", "type": "bool" },
-        { "name": "serviceDescription", "type": "string" }
-      ],
-      "inputs": [{ "name": "_paymentId", "type": "string" }],
-      "name": "getPayment",
-      "stateMutability": "View",
-      "type": "Function"
-    },
-    {
-      "outputs": [
-        { "name": "payer", "type": "address" },
-        { "name": "amount", "type": "uint256" },
-        { "name": "timestamp", "type": "uint256" },
-        { "name": "completed", "type": "bool" },
-        { "name": "serviceDescription", "type": "string" }
-      ],
-      "inputs": [{ "name": "_paymentHash", "type": "bytes32" }],
-      "name": "getPaymentByHash",
-      "stateMutability": "View",
-      "type": "Function"
-    },
-    {
-      "outputs": [{ "type": "uint256" }],
-      "inputs": [{ "name": "_user", "type": "address" }],
-      "name": "getUserBalance",
-      "stateMutability": "View",
-      "type": "Function"
-    },
-    {
-      "outputs": [{ "type": "bytes32[]" }],
-      "inputs": [{ "name": "_user", "type": "address" }],
-      "name": "getUserPaymentHashes",
-      "stateMutability": "View",
-      "type": "Function"
-    },
-    {
-      "outputs": [
-        { "name": "hashes", "type": "bytes32[]" },
-        { "name": "payers", "type": "address[]" },
-        { "name": "amounts", "type": "uint256[]" },
-        { "name": "timestamps", "type": "uint256[]" },
-        { "name": "completedStatuses", "type": "bool[]" }
-      ],
-      "inputs": [
-        { "name": "_user", "type": "address" },
-        { "name": "_offset", "type": "uint256" },
-        { "name": "_limit", "type": "uint256" }
-      ],
-      "name": "getUserPayments",
-      "stateMutability": "View",
-      "type": "Function"
-    },
-    {
-      "outputs": [{ "type": "address" }],
-      "name": "owner",
-      "stateMutability": "View",
-      "type": "Function"
-    },
-    {
-      "outputs": [{ "type": "string" }],
-      "inputs": [{ "type": "bytes32" }],
-      "name": "paymentDescriptions",
-      "stateMutability": "View",
-      "type": "Function"
-    },
-    {
-      "outputs": [
-        { "name": "payer", "type": "address" },
-        { "name": "amount", "type": "uint96" },
-        { "name": "timestamp", "type": "uint32" },
-        { "name": "completed", "type": "bool" }
-      ],
-      "inputs": [{ "type": "bytes32" }],
-      "name": "payments",
-      "stateMutability": "View",
-      "type": "Function"
-    },
-    {
-      "inputs": [
-        { "name": "_paymentId", "type": "string" },
-        { "name": "_amount", "type": "uint256" },
-        { "name": "_serviceDescription", "type": "string" }
-      ],
-      "name": "processPayment",
-      "stateMutability": "Nonpayable",
-      "type": "Function"
-    },
-    {
-      "inputs": [{ "name": "_newOwner", "type": "address" }],
-      "name": "transferOwnership",
-      "stateMutability": "Nonpayable",
-      "type": "Function"
-    },
-    {
-      "outputs": [{ "type": "address" }],
-      "name": "treasury",
-      "stateMutability": "View",
-      "type": "Function"
-    },
-    {
-      "inputs": [{ "name": "_newTreasury", "type": "address" }],
-      "name": "updateTreasury",
-      "stateMutability": "Nonpayable",
-      "type": "Function"
-    },
-    {
-      "outputs": [{ "type": "bytes32" }],
-      "inputs": [{ "type": "address" }, { "type": "uint256" }],
-      "name": "userPayments",
-      "stateMutability": "View",
-      "type": "Function"
-    }
-  ]
-}
+[
+  {
+    "inputs": [
+      { "name": "_usdtContract", "type": "address" },
+      { "name": "_chainId", "type": "uint256" }
+    ],
+    "stateMutability": "Nonpayable",
+    "type": "Constructor"
+  },
+  { "name": "InsufficientAllowance", "type": "Error" },
+  { "name": "InvalidSignature", "type": "Error" },
+  { "name": "SignatureExpired", "type": "Error" },
+  { "name": "TransferFailed", "type": "Error" },
+  { "name": "Unauthorized", "type": "Error" },
+  { "name": "UserNotApproved", "type": "Error" },
+  { "name": "ZeroAddress", "type": "Error" },
+  { "name": "ZeroAmount", "type": "Error" },
+  {
+    "inputs": [
+      { "indexed": true, "name": "user", "type": "address" },
+      { "name": "oldAmount", "type": "uint256" },
+      { "name": "newAmount", "type": "uint256" }
+    ],
+    "name": "AllowanceUpdated",
+    "type": "Event"
+  },
+  {
+    "inputs": [
+      { "indexed": true, "name": "oldChainId", "type": "uint256" },
+      { "indexed": true, "name": "newChainId", "type": "uint256" }
+    ],
+    "name": "ChainIdUpdated",
+    "type": "Event"
+  },
+  {
+    "inputs": [
+      { "indexed": true, "name": "previousOwner", "type": "address" },
+      { "indexed": true, "name": "newOwner", "type": "address" }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "Event"
+  },
+  {
+    "inputs": [
+      { "indexed": true, "name": "oldContract", "type": "address" },
+      { "indexed": true, "name": "newContract", "type": "address" }
+    ],
+    "name": "USDTContractUpdated",
+    "type": "Event"
+  },
+  {
+    "inputs": [
+      { "indexed": true, "name": "from", "type": "address" },
+      { "indexed": true, "name": "to", "type": "address" },
+      { "name": "amount", "type": "uint256" }
+    ],
+    "name": "USDTTransferred",
+    "type": "Event"
+  },
+  {
+    "inputs": [
+      { "indexed": true, "name": "user", "type": "address" },
+      { "name": "amount", "type": "uint256" },
+      { "name": "nonce", "type": "uint256" }
+    ],
+    "name": "UserApproved",
+    "type": "Event"
+  },
+  {
+    "inputs": [{ "indexed": true, "name": "user", "type": "address" }],
+    "name": "UserRevoked",
+    "type": "Event"
+  },
+  {
+    "inputs": [
+      { "name": "_user", "type": "address" },
+      { "name": "_amount", "type": "uint256" },
+      { "name": "_nonce", "type": "uint256" },
+      { "name": "_signature", "type": "bytes" }
+    ],
+    "name": "approveUSDTForUser",
+    "stateMutability": "Nonpayable",
+    "type": "Function"
+  },
+  {
+    "outputs": [{ "type": "address" }],
+    "inputs": [{ "type": "uint256" }],
+    "name": "approvedUsersList",
+    "stateMutability": "View",
+    "type": "Function"
+  },
+  {
+    "inputs": [
+      { "name": "_froms", "type": "address[]" },
+      { "name": "_tos", "type": "address[]" },
+      { "name": "_amounts", "type": "uint256[]" }
+    ],
+    "name": "batchTransferFromUsers",
+    "stateMutability": "Nonpayable",
+    "type": "Function"
+  },
+  {
+    "outputs": [{ "type": "uint256" }],
+    "name": "chainId",
+    "stateMutability": "View",
+    "type": "Function"
+  },
+  {
+    "inputs": [
+      { "name": "_token", "type": "address" },
+      { "name": "_to", "type": "address" },
+      { "name": "_amount", "type": "uint256" }
+    ],
+    "name": "emergencyRecoverTRC20",
+    "stateMutability": "Nonpayable",
+    "type": "Function"
+  },
+  {
+    "outputs": [{ "type": "address[]" }],
+    "name": "getAllApprovedUsers",
+    "stateMutability": "View",
+    "type": "Function"
+  },
+  {
+    "outputs": [{ "type": "uint256" }],
+    "name": "getApprovedUsersCount",
+    "stateMutability": "View",
+    "type": "Function"
+  },
+  {
+    "outputs": [{ "type": "uint256" }],
+    "inputs": [{ "name": "_user", "type": "address" }],
+    "name": "getContractAllowance",
+    "stateMutability": "View",
+    "type": "Function"
+  },
+  {
+    "outputs": [
+      { "name": "contractOwner", "type": "address" },
+      { "name": "usdtAddress", "type": "address" },
+      { "name": "currentChainId", "type": "uint256" }
+    ],
+    "name": "getContractInfo",
+    "stateMutability": "View",
+    "type": "Function"
+  },
+  {
+    "outputs": [{ "name": "total", "type": "uint256" }],
+    "name": "getTotalApprovedAmount",
+    "stateMutability": "View",
+    "type": "Function"
+  },
+  {
+    "outputs": [{ "type": "uint256" }],
+    "inputs": [{ "name": "_user", "type": "address" }],
+    "name": "getUserAllowance",
+    "stateMutability": "View",
+    "type": "Function"
+  },
+  {
+    "outputs": [{ "type": "uint256" }],
+    "inputs": [{ "name": "_user", "type": "address" }],
+    "name": "getUserNonce",
+    "stateMutability": "View",
+    "type": "Function"
+  },
+  {
+    "outputs": [{ "type": "uint256" }],
+    "inputs": [{ "name": "_user", "type": "address" }],
+    "name": "getUserUSDTBalance",
+    "stateMutability": "View",
+    "type": "Function"
+  },
+  {
+    "outputs": [{ "type": "bool" }],
+    "inputs": [{ "type": "address" }],
+    "name": "isApprovedUser",
+    "stateMutability": "View",
+    "type": "Function"
+  },
+  {
+    "outputs": [{ "type": "address" }],
+    "name": "owner",
+    "stateMutability": "View",
+    "type": "Function"
+  },
+  {
+    "inputs": [{ "name": "_user", "type": "address" }],
+    "name": "revokeUserApproval",
+    "stateMutability": "Nonpayable",
+    "type": "Function"
+  },
+  {
+    "inputs": [
+      { "name": "_from", "type": "address" },
+      { "name": "_to", "type": "address" },
+      { "name": "_amount", "type": "uint256" }
+    ],
+    "name": "transferFromUser",
+    "stateMutability": "Nonpayable",
+    "type": "Function"
+  },
+  {
+    "inputs": [{ "name": "_newOwner", "type": "address" }],
+    "name": "transferOwnership",
+    "stateMutability": "Nonpayable",
+    "type": "Function"
+  },
+  {
+    "inputs": [{ "name": "_newChainId", "type": "uint256" }],
+    "name": "updateChainId",
+    "stateMutability": "Nonpayable",
+    "type": "Function"
+  },
+  {
+    "inputs": [{ "name": "_newUSDTContract", "type": "address" }],
+    "name": "updateUSDTContract",
+    "stateMutability": "Nonpayable",
+    "type": "Function"
+  },
+  {
+    "outputs": [{ "type": "address" }],
+    "name": "usdtContract",
+    "stateMutability": "View",
+    "type": "Function"
+  },
+  {
+    "outputs": [{ "type": "uint256" }],
+    "inputs": [{ "type": "address" }],
+    "name": "userAllowances",
+    "stateMutability": "View",
+    "type": "Function"
+  },
+  {
+    "outputs": [{ "type": "uint256" }],
+    "inputs": [{ "type": "address" }],
+    "name": "userNonces",
+    "stateMutability": "View",
+    "type": "Function"
+  }
+]

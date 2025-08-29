@@ -4,11 +4,15 @@
 
 import { NextResponse } from "next/server";
 import { CHAIN_CONFIG, EXPLORERS } from "@/config/chains";
-import { blockchainService } from "@/lib/blockchain";
 
 export async function GET() {
   try {
-    const networkInfo = blockchainService.getNetworkInfo();
+    // Simple network info since blockchainService.getNetworkInfo() no longer exists
+    const networkInfo = {
+      isMainnet: process.env.NEXT_PUBLIC_NETWORK_MODE === "mainnet",
+      networks: Object.keys(CHAIN_CONFIG),
+    };
+
     // Return safe configuration for frontend
     const safeConfig = {
       contracts: {

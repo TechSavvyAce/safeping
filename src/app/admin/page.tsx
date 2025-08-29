@@ -28,7 +28,9 @@ export default function AdminLogin() {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        // Set admin session
+        // Store admin credentials for API calls
+        localStorage.setItem("admin_username", username);
+        localStorage.setItem("admin_password", password);
         localStorage.setItem("adminAuthenticated", "true");
         localStorage.setItem("adminLoginTime", Date.now().toString());
 

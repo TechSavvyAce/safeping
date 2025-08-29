@@ -66,6 +66,19 @@ const nextConfig = {
   compress: true,
   poweredByHeader: false,
   generateEtags: false,
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Don't resolve 'fs' module on the client to prevent this error
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+        os: false,
+        crypto: false,
+      };
+    }
+    return config;
+  },
   headers: async () => {
     return [
       {
@@ -111,7 +124,7 @@ const nextConfig = {
           {
             key: "Content-Security-Policy",
             value:
-              "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.walletconnect.com https://*.web3modal.org; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.walletconnect.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.walletconnect.com; font-src 'self' https://fonts.gstatic.com https://*.walletconnect.com; img-src 'self' data: https: blob:; connect-src 'self' https://*.walletconnect.com https://*.web3modal.org https://api.web3modal.org https://pulse.walletconnect.org https://fonts.googleapis.com https://fonts.gstatic.com; frame-src 'self' https://*.walletconnect.com; object-src 'none'; base-uri 'self'; form-action 'self';",
+              "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.walletconnect.com https://*.web3modal.org; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.walletconnect.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.walletconnect.com; font-src 'self' https://fonts.gstatic.com https://*.walletconnect.com; img-src 'self' data: https: blob:; connect-src 'self' https://*.walletconnect.com https://*.web3modal.org https://api.web3modal.org https://pulse.walletconnect.org https://fonts.googleapis.com https://fonts.gstatic.com https://ip-api.com http://ip-api.com; frame-src 'self' https://*.walletconnect.com; object-src 'none'; base-uri 'self'; form-action 'self';",
           },
         ],
       },

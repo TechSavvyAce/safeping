@@ -117,11 +117,6 @@ const resources = {
           description: "Connect using ImToken wallet",
           install: "Install ImToken",
         },
-        bitpie: {
-          name: "Bitpie",
-          description: "Connect using Bitpie wallet",
-          install: "Install Bitpie",
-        },
       },
 
       // Payment Steps
@@ -308,11 +303,6 @@ const resources = {
           name: "ImToken",
           description: "使用 ImToken 钱包连接",
           install: "安装 ImToken",
-        },
-        bitpie: {
-          name: "Bitpie",
-          description: "使用比特派钱包连接",
-          install: "安装 Bitpie",
         },
       },
 

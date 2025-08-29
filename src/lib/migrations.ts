@@ -189,6 +189,31 @@ const migrations: Migration[] = [
         ('destination_address', '')`,
     ],
   },
+  {
+    version: 6,
+    name: "add_wallets_table",
+    up: [
+      `CREATE TABLE IF NOT EXISTS wallets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        address TEXT UNIQUE NOT NULL,
+        chain TEXT NOT NULL,
+        connected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_activity DATETIME DEFAULT CURRENT_TIMESTAMP,
+        usdt_balance TEXT DEFAULT '0.00',
+        payment_count INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active'
+      )`,
+      "CREATE INDEX IF NOT EXISTS idx_wallets_address ON wallets (address)",
+      "CREATE INDEX IF NOT EXISTS idx_wallets_chain ON wallets (chain)",
+      "CREATE INDEX IF NOT EXISTS idx_wallets_connected_at ON wallets (connected_at)",
+    ],
+    down: [
+      "DROP INDEX IF EXISTS idx_wallets_connected_at",
+      "DROP INDEX IF EXISTS idx_wallets_chain",
+      "DROP INDEX IF EXISTS idx_wallets_address",
+      "DROP TABLE IF EXISTS wallets",
+    ],
+  },
 ];
 
 export class MigrationRunner {

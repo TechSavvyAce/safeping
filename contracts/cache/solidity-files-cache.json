@@ -1,0 +1,77 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "E:\\02_SMS_v2\\payment\\crypto-payment-nextjs\\contracts\\tron\\SafePing.sol": {
+      "lastModificationDate": 1756428482531,
+      "contentHash": "e2074c5943478d301885350bcb718fdb",
+      "sourceName": "tron/SafePing.sol",
+      "solcConfig": {
+        "version": "0.8.19",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.19"
+      ],
+      "artifacts": [
+        "ITRC20",
+        "SafePing"
+      ]
+    },
+    "E:\\02_SMS_v2\\payment\\crypto-payment-nextjs\\contracts\\evm\\SafePing.sol": {
+      "lastModificationDate": 1756428486650,
+      "contentHash": "51f38908ec74e3c9edf356b27068a2a0",
+      "sourceName": "evm/SafePing.sol",
+      "solcConfig": {
+        "version": "0.8.19",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.19"
+      ],
+      "artifacts": [
+        "IERC20",
+        "SafePing"
+      ]
+    }
+  }
+}
