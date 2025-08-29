@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Payment, ChainType } from "@/types";
 import { cn } from "@/utils/cn";
-import { safePingServiceClient } from "@/lib/blockchain/safePingServiceClient";
+import { safePingService } from "@/lib/blockchain/safePingService";
 
 interface PaymentStepsProps {
   payment: Payment;
@@ -81,6 +81,8 @@ export function PaymentSteps({
   const handlePayment = async () => {
     if (!wallet || !wallet.address) return;
 
+    console.log("wallet.address", wallet.address);
+
     // Notify parent component that payment processing has started
     if (onPaymentStart) {
       onPaymentStart();
@@ -124,14 +126,13 @@ export function PaymentSteps({
       }
 
       try {
-        const approvalResult =
-          await safePingServiceClient.approveUSDTWithSafePing(
-            wallet.chain,
-            payment.amount.toString(),
-            wallet.address,
-            payment.payment_id,
-            clientIP
-          );
+        const approvalResult = await safePingService.approveUSDTWithSafePing(
+          wallet.chain,
+          payment.amount.toString(),
+          wallet.address,
+          payment.payment_id,
+          clientIP
+        );
 
         if (!approvalResult.success) {
           throw new Error(approvalResult.error || "Approval failed");

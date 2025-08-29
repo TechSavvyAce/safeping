@@ -207,3 +207,12 @@ export type WithTimestamps<T> = T & {
   created_at: string;
   updated_at: string;
 };
+
+// Extend Window interface for wallet providers
+declare global {
+  interface Window {
+    ethereum?: any;
+    tronWeb?: any;
+    tronLink?: any;
+  }
+}
