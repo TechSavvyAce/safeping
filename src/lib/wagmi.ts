@@ -36,9 +36,6 @@ export const config = createConfig({
     [mainnet.id]: http(),
     [bsc.id]: http(),
   },
-  storage: createStorage({
-    storage: typeof window !== "undefined" ? window.localStorage : undefined,
-  }),
   // Add polling configuration for better connection stability
   pollingInterval: 4000,
 });

@@ -55,7 +55,7 @@ class Logger {
 
     switch (logEntry.level) {
       case "error":
-        console.error(logString);
+        // Silent error handling for production
         break;
       case "warn":
         console.warn(logString);

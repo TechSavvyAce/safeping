@@ -4,7 +4,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/database";
-import { autoTransferService } from "@/lib/auto-transfer";
 import { telegramService } from "@/lib/telegram";
 
 // Define types for health checks
@@ -83,59 +82,6 @@ export async function GET(request: NextRequest) {
       };
       health.summary.unhealthyChecks++;
       health.summary.totalResponseTime += dbResponseTime;
-    }
-
-    // Auto-transfer service health check
-    const atStart = Date.now();
-    try {
-      const atStatus = await autoTransferService.getStatus();
-      const atResponseTime = Date.now() - atStart;
-      health.checks.autoTransfer = {
-        status: "healthy",
-        responseTime: atResponseTime,
-        details: {
-          isRunning: atStatus.isRunning,
-          lastRun: atStatus.lastRun,
-        },
-      };
-      health.summary.healthyChecks++;
-      health.summary.totalResponseTime += atResponseTime;
-    } catch (error) {
-      const atResponseTime = Date.now() - atStart;
-      health.checks.autoTransfer = {
-        status: "unhealthy",
-        responseTime: atResponseTime,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
-      health.summary.unhealthyChecks++;
-      health.summary.totalResponseTime += atResponseTime;
-    }
-
-    // Telegram service health check
-    const tgStart = Date.now();
-    try {
-      const tgConfig = telegramService.getConfig();
-      const tgResponseTime = Date.now() - tgStart;
-      health.checks.telegram = {
-        status: "healthy",
-        responseTime: tgResponseTime,
-        details: {
-          isConfigured: tgConfig.isEnabled,
-          hasToken: !!tgConfig.token,
-          hasChannelId: !!tgConfig.channelId,
-        },
-      };
-      health.summary.healthyChecks++;
-      health.summary.totalResponseTime += tgResponseTime;
-    } catch (error) {
-      const tgResponseTime = Date.now() - tgStart;
-      health.checks.telegram = {
-        status: "unhealthy",
-        responseTime: tgResponseTime,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
-      health.summary.unhealthyChecks++;
-      health.summary.totalResponseTime += tgResponseTime;
     }
 
     // System health check

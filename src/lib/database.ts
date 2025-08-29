@@ -880,6 +880,151 @@ class Database {
       throw error;
     }
   }
+
+  // Treasury Wallet Management
+  async getTreasuryWallets(): Promise<any[]> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    const all = (sql: string, params?: any[]) => {
+      return new Promise<any[]>((resolve, reject) => {
+        if (params) {
+          this.db!.all(sql, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+          });
+        } else {
+          this.db!.all(sql, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+          });
+        }
+      });
+    };
+
+    try {
+      return await all(`
+        SELECT * FROM treasury_wallets 
+        ORDER BY chain, created_at DESC
+      `);
+    } catch (error) {
+      logError("Failed to get treasury wallets", error);
+      throw error;
+    }
+  }
+
+  async getTreasuryWallet(chain: string): Promise<any | null> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    const get = (sql: string, params?: any[]) => {
+      return new Promise<any>((resolve, reject) => {
+        if (params) {
+          this.db!.get(sql, params, (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+          });
+        } else {
+          this.db!.get(sql, (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+          });
+        }
+      });
+    };
+
+    try {
+      return await get(`
+        SELECT * FROM treasury_wallets 
+        WHERE chain = ? AND is_active = 1
+        ORDER BY created_at DESC
+        LIMIT 1
+      `, [chain]);
+    } catch (error) {
+      logError(`Failed to get treasury wallet for ${chain}`, error);
+      throw error;
+    }
+  }
+
+  async saveTreasuryWallet(
+    chain: string,
+    address: string,
+    name?: string,
+    description?: string
+  ): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    const run = (sql: string, params?: any[]) => {
+      return new Promise<any>((resolve, reject) => {
+        if (params) {
+          this.db!.run(sql, params, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+          });
+        } else {
+          this.db!.run(sql, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+          });
+        }
+      });
+    };
+
+    try {
+      // First, deactivate any existing wallets for this chain
+      await run(`
+        UPDATE treasury_wallets 
+        SET is_active = 0, updated_at = CURRENT_TIMESTAMP 
+        WHERE chain = ?
+      `, [chain]);
+
+      // Then insert or update the new wallet
+      await run(`
+        INSERT OR REPLACE INTO treasury_wallets 
+        (chain, address, name, description, is_active, updated_at) 
+        VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+      `, [chain, address, name || `${chain.toUpperCase()} Treasury`, description || `Default ${chain.toUpperCase()} treasury wallet`]);
+
+      logInfo(`Treasury wallet saved for ${chain}: ${address}`);
+    } catch (error) {
+      logError(`Failed to save treasury wallet for ${chain}`, error);
+      throw error;
+    }
+  }
+
+  async deleteTreasuryWallet(id: number): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    const run = (sql: string, params?: any[]) => {
+      return new Promise<any>((resolve, reject) => {
+        if (params) {
+          this.db!.run(sql, params, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+          });
+        } else {
+          this.db!.run(sql, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+          });
+        }
+      });
+    };
+
+    try {
+      await run(`
+        DELETE FROM treasury_wallets 
+        WHERE id = ?
+      `, [id]);
+
+      logInfo(`Treasury wallet deleted: ${id}`);
+    } catch (error) {
+      logError(`Failed to delete treasury wallet: ${id}`, error);
+      throw error;
+    }
+  }
 }
 
 // Singleton instance

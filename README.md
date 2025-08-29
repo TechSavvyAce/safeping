@@ -41,80 +41,38 @@ A comprehensive, production-ready cryptocurrency payment platform built with Nex
 - **Health Monitoring**: Comprehensive system health checks
 - **Error Handling**: Robust error handling and logging
 
-## 🚀 Quick Start
+## 🚀 Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
 - npm or yarn
-- SQLite (included)
-- Blockchain wallet with testnet/mainnet access
+- SQLite3
+- Environment variables configured
 
 ### Installation
 
-1. **Clone the repository**
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Set up environment: `npm run setup:env`
+4. Run database migrations: `npm run db:migrate`
+5. Start development server: `npm run dev`
+
+### Cron Job Setup
+
+To automatically mark expired payments, set up a cron job:
 
 ```bash
-git clone <repository-url>
-cd crypto-payment-nextjs
+# Run every 5 minutes
+*/5 * * * * cd /path/to/project && npm run mark:expired
+
+# Or run every hour
+0 * * * * cd /path/to/project && npm run mark:expired
 ```
 
-2. **Install dependencies**
+This will automatically update payment statuses from "pending" to "expired" when they pass their expiration time.
 
-```bash
-npm install
-```
-
-3. **Configure environment**
-
-```bash
-cp env.example .env.local
-```
-
-4. **Update environment variables**
-
-```env
-# App Configuration
-NEXT_PUBLIC_BASE_URL="http://localhost:3000"
-NEXT_PUBLIC_NETWORK_MODE="testnet"
-
-# WalletConnect
-NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID="your_project_id"
-
-# Telegram Bot (optional)
-TELEGRAM_TOKEN="your_bot_token"
-TELEGRAM_CHANNEL_ID="your_channel_id"
-
-# Auto-Transfer Configuration
-AUTO_TRANSFER_ENABLED="true"
-AUTO_TRANSFER_MIN_BALANCE="100"
-AUTO_TRANSFER_DESTINATION="your_destination_address"
-AUTO_TRANSFER_INTERVAL_MINUTES="30"
-
-# Admin Configuration
-ADMIN_SECRET_KEY="your_admin_secret"
-ADMIN_WALLET_ADDRESS="your_admin_wallet"
-ADMIN_PRIVATE_KEY="your_private_key"
-
-# Blockchain API Keys
-ETHERSCAN_API_KEY="your_etherscan_key"
-BSCSCAN_API_KEY="your_bscscan_key"
-TRONGRID_API_KEY="your_trongrid_key"
-```
-
-5. **Run the development server**
-
-```bash
-npm run dev
-```
-
-6. **Access the application**
-
-- **Frontend**: http://localhost:3000
-- **Admin Dashboard**: http://localhost:3000/admin
-- **Health Check**: http://localhost:3000/api/health
-
-## 🏗️ Architecture
+## 📁 Project Structure
 
 ### **Frontend Layer**
 

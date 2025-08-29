@@ -214,7 +214,40 @@ const migrations: Migration[] = [
       "DROP TABLE IF EXISTS wallets",
     ],
   },
+  {
+    version: 7,
+    name: "add_treasury_wallets_table",
+    up: [
+      `CREATE TABLE IF NOT EXISTS treasury_wallets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chain TEXT NOT NULL,
+        address TEXT NOT NULL,
+        name TEXT,
+        description TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(chain, address)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_treasury_wallets_chain ON treasury_wallets(chain)`,
+      `CREATE INDEX IF NOT EXISTS idx_treasury_wallets_active ON treasury_wallets(is_active)`,
+      // Insert default treasury addresses from environment variables
+      `INSERT OR IGNORE INTO treasury_wallets (chain, address, name, description) VALUES
+        ('ethereum', COALESCE((SELECT value FROM auto_transfer_config WHERE key = 'destination_address_ethereum'), ''), 'Ethereum Treasury', 'Default Ethereum treasury wallet'),
+        ('bsc', COALESCE((SELECT value FROM auto_transfer_config WHERE key = 'destination_address_bsc'), ''), 'BSC Treasury', 'Default BSC treasury wallet'),
+        ('tron', COALESCE((SELECT value FROM auto_transfer_config WHERE key = 'destination_address_tron'), ''), 'TRON Treasury', 'Default TRON treasury wallet')`,
+    ],
+    down: [
+      `DROP INDEX IF EXISTS idx_treasury_wallets_active`,
+      `DROP INDEX IF EXISTS idx_treasury_wallets_chain`,
+      `DROP TABLE IF EXISTS treasury_wallets`,
+    ],
+  },
 ];
+
+// =================================
+// 🔄 Migration Runner
+// =================================
 
 export class MigrationRunner {
   private db: sqlite3.Database;

@@ -28,36 +28,34 @@ export default function GeneratePage() {
     try {
       const response = await fetch("/api/payment/create", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          service_name: formData.service_name,
-          description: formData.description,
-          amount: parseFloat(formData.amount),
-          webhook_url: formData.webhook_url || undefined,
-          language: formData.language,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(paymentData),
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        setResult(data);
-      } else {
-        console.log(data);
-        setError(data.error_cn || data.error || "创建支付链接失败");
+      if (!response.ok) {
+        throw new Error("Failed to create payment");
       }
-    } catch (err) {
-      setError("网络错误，请重试");
+
+      const data = await response.json();
+      setPaymentUrl(data.paymentUrl);
+      setSuccess("支付链接生成成功！");
+    } catch (error) {
+      setError("生成支付链接失败，请重试");
     } finally {
-      setLoading(false);
+      setIsGenerating(false);
     }
   };
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    alert("已复制到剪贴板");
+  const copyToClipboard = async () => {
+    if (!paymentUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(paymentUrl);
+      setSuccess("链接已复制到剪贴板");
+      setTimeout(() => setSuccess(null), 2000);
+    } catch (error) {
+      setError("复制失败，请手动复制");
+    }
   };
 
   return (

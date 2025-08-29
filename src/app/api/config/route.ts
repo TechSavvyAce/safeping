@@ -53,9 +53,9 @@ export async function GET() {
 
     return NextResponse.json(safeConfig);
   } catch (error: any) {
-    console.error("Config API error:", error);
+    // Silent error handling for production
     return NextResponse.json(
-      { error: "Failed to load configuration" },
+      { error: "Failed to get configuration" },
       { status: 500 }
     );
   }

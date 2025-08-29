@@ -40,25 +40,12 @@ export async function GET(request: NextRequest) {
       networks: ["ethereum", "bsc", "tron"],
     };
 
-    // Debug logging
-    console.log("🔍 Environment configuration:", {
-      NODE_ENV: process.env.NODE_ENV,
-      NETWORK_MODE: process.env.NEXT_PUBLIC_NETWORK_MODE,
-      DATABASE_URL: process.env.DATABASE_URL,
-      WALLETCONNECT_PROJECT_ID: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
-        ? "Set"
-        : "Not set",
-    });
-
-    console.log("🔍 Network info:", networkInfo);
-
     // System health
     const systemHealth = {
       timestamp: new Date().toISOString(),
       database: "connected",
-      blockchain: "available",
-      environment: process.env.NODE_ENV,
-      networkMode: process.env.NEXT_PUBLIC_NETWORK_MODE,
+      blockchain: "operational",
+      version: process.env.npm_package_version || "1.0.0",
     };
 
     return NextResponse.json({

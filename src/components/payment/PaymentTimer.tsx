@@ -45,14 +45,14 @@ export function PaymentTimer({
         });
       } else {
         setTimeLeft({ minutes: 0, seconds: 0, total: 0 });
-        onExpire?.();
+        if (onExpire) {
+          onExpire();
+        }
       }
     };
 
-    // Calculate immediately
     calculateTimeLeft();
 
-    // Update every second
     const timer = setInterval(calculateTimeLeft, 1000);
 
     return () => clearInterval(timer);
@@ -98,7 +98,8 @@ export function PaymentTimer({
         <div className="text-center">
           <div className="font-semibold text-white text-lg">剩余时间</div>
           <div className="font-mono text-2xl font-bold text-white bg-black/20 px-3 py-1 rounded-lg mt-1">
-            {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
+            {String(minutes).padStart(2, "0")}:
+            {String(seconds).padStart(2, "0")}
           </div>
         </div>
       </div>

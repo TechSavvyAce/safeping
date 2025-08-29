@@ -27,17 +27,18 @@ export async function POST(request: NextRequest) {
       try {
         const { getDatabase } = await import("@/lib/database");
         const db = getDatabase();
-        await db.updatePaymentStatus(paymentId, "completed");
-      } catch (dbError) {
-        console.error("Failed to update payment status:", dbError);
-        // Don't fail the response if DB update fails
+        await db.updatePaymentStatus(paymentId, "completed", {
+          tx_hash: result.txHash,
+          chain: chain,
+        });
+      } catch (dbError: any) {
+        // Silent error handling for production
       }
 
       return NextResponse.json({
         success: true,
         message: "Auto-transfer completed successfully",
         txHash: result.txHash,
-        paymentStatus: "completed",
       });
     } else {
       return NextResponse.json(
@@ -50,14 +51,9 @@ export async function POST(request: NextRequest) {
       );
     }
   } catch (error: any) {
-    console.error("Auto-transfer API error:", error);
+    // Silent error handling for production
     return NextResponse.json(
-      {
-        success: false,
-        error: "Internal server error",
-        details: error.message,
-        paymentStatus: "failed",
-      },
+      { error: "Auto-transfer failed" },
       { status: 500 }
     );
   }

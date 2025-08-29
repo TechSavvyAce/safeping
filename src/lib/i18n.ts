@@ -4,7 +4,6 @@
 
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
-import LanguageDetector from "i18next-browser-languagedetector";
 
 // Translation resources
 const resources = {
@@ -386,33 +385,23 @@ const resources = {
 };
 
 // Initialize i18next
-i18n
-  .use(LanguageDetector)
-  .use(initReactI18next)
-  .init({
-    resources,
-    lng: "zh-CN",
-    fallbackLng: "zh-CN",
-    debug: process.env.NODE_ENV === "development",
+i18n.use(initReactI18next).init({
+  resources,
+  lng: "zh-CN",
+  fallbackLng: "zh-CN",
+  debug: process.env.NODE_ENV === "development",
 
-    // Language detection options
-    detection: {
-      order: ["localStorage", "navigator", "htmlTag"],
-      lookupLocalStorage: "i18nextLng",
-      caches: ["localStorage"],
-    },
+  interpolation: {
+    escapeValue: false, // React already escapes values
+  },
 
-    interpolation: {
-      escapeValue: false, // React already escapes values
-    },
+  // Pluralization
+  pluralSeparator: "_",
+  contextSeparator: "_",
 
-    // Pluralization
-    pluralSeparator: "_",
-    contextSeparator: "_",
-
-    // Namespace
-    defaultNS: "translation",
-    ns: ["translation"],
-  });
+  // Namespace
+  defaultNS: "translation",
+  ns: ["translation"],
+});
 
 export default i18n;

@@ -40,9 +40,9 @@ export default function AdminLogin() {
         setError(data.error || "用户名或密码错误，请重试。");
         setIsLoading(false);
       }
-    } catch (error) {
-      console.error("Login error:", error);
-      setError("登录失败，请重试。");
+    } catch (error: any) {
+      setError(error.message || "登录失败，请重试");
+    } finally {
       setIsLoading(false);
     }
   };

@@ -26,13 +26,9 @@ if (isWalletConnectConfigured()) {
       defaultChain: config.chains[0],
     });
   } catch (error) {
-    console.warn("Failed to initialize Web3Modal:", error);
+    // Silent error handling for production
     web3modal = null;
   }
-} else {
-  console.warn(
-    "WalletConnect Project ID not configured. Web3Modal will not be available."
-  );
 }
 
 // Export the modal instance for use in components

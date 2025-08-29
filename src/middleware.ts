@@ -17,8 +17,15 @@ export function middleware(request: NextRequest) {
 
   // Log API requests (simplified)
   const duration = Date.now() - startTime;
-  if (pathname.startsWith("/api/")) {
-    console.log(`API Request: ${method} ${pathname} - ${duration}ms`);
+
+  // Apply rate limiting
+  const rateLimitResult = rateLimit(request, "middleware");
+  if (!rateLimitResult.success) {
+    return createRateLimitResponse(
+      rateLimitResult.limit,
+      rateLimitResult.remaining,
+      rateLimitResult.reset
+    );
   }
 
   return response;

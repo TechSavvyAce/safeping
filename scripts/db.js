@@ -36,9 +36,9 @@ try {
     console.log("Using direct migration implementation...");
 
     logInfo = (msg, data) =>
-      console.log("INFO:", msg, data ? JSON.stringify(data) : "");
+      // Silent handling for production
     logError = (msg, data) =>
-      console.error("ERROR:", msg, data ? JSON.stringify(data) : "");
+      // Silent error handling for production
 
     // Simplified migration runner for development
     MigrationRunner = class {

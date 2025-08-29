@@ -38,11 +38,8 @@ export class BalanceService {
       } else {
         return await EVMService.getUserUSDTBalance(chain, address);
       }
-    } catch (error) {
-      console.error(
-        `Failed to get USDT balance for ${address} on ${chain}:`,
-        error
-      );
+    } catch (error: any) {
+      // Silent error handling for production
       return "0.00";
     }
   }

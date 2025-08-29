@@ -16,26 +16,8 @@ const getContractAddress = (testnet: string, mainnet: string): string => {
 
 // Get Tron payment processor address with proper hex handling
 function getTronPaymentProcessorAddress(): string {
-  console.log(
-    `🔍 TRON Config Debug - Network Mode: ${
-      process.env.NEXT_PUBLIC_NETWORK_MODE || "mainnet (default)"
-    }`
-  );
-  console.log(
-    `🔍 TRON Config Debug - Environment Variable: ${
-      process.env.NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_MAINNET || "not set"
-    }`
-  );
   return process.env.NEXT_PUBLIC_TRON_PAYMENT_PROCESSOR_MAINNET || "";
 }
-
-// Debug logging for TRON configuration
-console.log(`🔍 TRON Config Debug - isMainnet: ${isMainnet}`);
-console.log(
-  `🔍 TRON Config Debug - NEXT_PUBLIC_NETWORK_MODE: ${
-    process.env.NEXT_PUBLIC_NETWORK_MODE || "not set"
-  }`
-);
 
 export const CHAIN_CONFIG: ChainConfig = {
   bsc: {
@@ -76,11 +58,6 @@ export const CHAIN_CONFIG: ChainConfig = {
       const address = isMainnet
         ? getTronPaymentProcessorAddress() // Use function to get address with proper hex handling
         : "TWTTXmwy5gRWcuGH8e7r64AQ5F8eRcLqR6"; // TRON Shasta Payment Processor
-      console.log(
-        `🔍 TRON Config Debug - Selected payment processor: ${address} (${
-          isMainnet ? "mainnet" : "testnet"
-        })`
-      );
       return address;
     })(),
     chainId: isMainnet ? "mainnet" : "shasta",

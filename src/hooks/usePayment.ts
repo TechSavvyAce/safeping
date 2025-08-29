@@ -78,9 +78,11 @@ export function usePayment(paymentId: string): UsePaymentReturn {
 
         return result;
       } catch (err: any) {
-        console.error("Payment processing failed:", err);
-        setError(err.message);
-        throw err;
+        // Silent error handling for production
+        setError(err.message || "Failed to process payment");
+        setPayment(null);
+      } finally {
+        setIsLoading(false);
       }
     },
     [paymentId, payment]
@@ -118,8 +120,7 @@ export function usePayment(paymentId: string): UsePaymentReturn {
 
       return statusData;
     } catch (err: any) {
-      console.error("Failed to check payment status:", err);
-      // Don't set error for status checks to avoid interrupting the flow
+      // Silent error handling for production
     }
   }, [paymentId, payment]);
 

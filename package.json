@@ -17,6 +17,7 @@
     "db:status": "node scripts/db.js status",
     "db:rollback": "node scripts/db.js rollback",
     "db:reset": "node scripts/db.js reset",
+    "mark:expired": "node scripts/cron-mark-expired.js",
     "deploy": "./scripts/deploy.sh",
     "deploy:build": "./scripts/deploy.sh build",
     "deploy:health": "./scripts/deploy.sh health",

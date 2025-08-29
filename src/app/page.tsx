@@ -7,39 +7,23 @@
 import React from "react";
 import Link from "next/link";
 import { CHAIN_CONFIG } from "@/config/chains";
+import { NetworkIndicator } from "@/components/ui/NetworkIndicator";
 
 export default function HomePage() {
-  // Debug: Log blockchain configuration
-  if (typeof window !== "undefined") {
-    console.log("🔍 Blockchain Configuration Debug:", {
-      networkMode: process.env.NEXT_PUBLIC_NETWORK_MODE,
-      bsc: {
-        paymentProcessor: CHAIN_CONFIG.bsc.paymentProcessor,
-        usdt: CHAIN_CONFIG.bsc.usdt,
-      },
-      ethereum: {
-        paymentProcessor: CHAIN_CONFIG.ethereum.paymentProcessor,
-        usdt: CHAIN_CONFIG.ethereum.usdt,
-      },
-      tron: {
-        paymentProcessor: CHAIN_CONFIG.tron.paymentProcessor,
-        usdt: CHAIN_CONFIG.tron.usdt,
-      },
-    });
-  }
-
   return (
     <div className="min-h-screen bg-gray-900">
       {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700">
-        <div className="max-w-4xl mx-auto px-6 py-4">
-          <div className="flex items-center space-x-3">
-            <div className="text-2xl">💳</div>
-            <div>
-              <h1 className="text-xl font-bold text-white">USDT多链支付平台</h1>
-              <p className="text-sm text-gray-400">
-                支持BSC、以太坊、波场网络的安全支付API
-              </p>
+      <header className="bg-gradient-to-r from-red-600 to-red-700 text-white relative overflow-hidden">
+        <div className="relative z-10 px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <div className="text-2xl">💳</div>
+              <h1 className="text-lg font-bold text-yellow-100">
+                USDT支付平台
+              </h1>
+            </div>
+            <div className="flex items-center space-x-2">
+              <NetworkIndicator variant="badge" />
             </div>
           </div>
         </div>
