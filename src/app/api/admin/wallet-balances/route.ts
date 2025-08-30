@@ -6,10 +6,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getWalletBalances } from "../../../../lib/database";
 import { logger } from "../../../../lib/logger";
-import { getChainConfig } from "../../../../lib/utils/chainUtils";
+import { EVMService } from "../../../../lib/blockchain/evmService";
 import { ChainType } from "../../../../lib/types/blockchain";
 import { AdminWalletBalance } from "../../../../types";
-import { ethers } from "ethers";
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,28 +29,6 @@ export async function GET(request: NextRequest) {
 
     logger.info("Starting wallet balances fetch");
 
-    // USDT Contract ABI - just the balanceOf function
-    const usdtAbi = [
-      "function balanceOf(address owner) view returns (uint256)",
-      "function decimals() view returns (uint8)",
-    ];
-
-    // USDT Contract addresses for each chain - use chain configuration
-    const usdtContracts = {
-      ethereum: getChainConfig("ethereum").usdt,
-      bsc: getChainConfig("bsc").usdt,
-      tron: getChainConfig("tron").usdt,
-    };
-
-    // RPC endpoints
-    const rpcEndpoints = {
-      ethereum:
-        process.env.NEXT_PUBLIC_ETHEREUM_RPC_URL ||
-        "https://eth-mainnet.g.alchemy.com/v2/demo",
-      bsc: process.env.BSC_RPC_URL || "https://bsc-dataseed1.binance.org/",
-      tron: "https://api.trongrid.io", // TRON uses HTTP API, not RPC
-    };
-
     // Get wallet balances from database
     let balances: AdminWalletBalance[] = [];
     try {
@@ -61,6 +38,7 @@ export async function GET(request: NextRequest) {
       );
     } catch (dbError) {
       logger.error("Database error when fetching wallet balances:", dbError);
+      console.error("❌ Database error:", dbError);
       // Return empty balances instead of failing completely
       balances = [];
     }
@@ -76,122 +54,218 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Check if ethers is available
-    if (typeof ethers === "undefined") {
-      logger.warn("Ethers.js not available, falling back to stored balances");
-      return NextResponse.json({
-        balances: balances.map((wallet) => ({
-          ...wallet,
-          realUsdtBalance: wallet.usdtBalance || "0.00",
-          lastUpdated: new Date().toISOString(),
-        })),
-        timestamp: new Date().toISOString(),
-        totalWallets: balances.length,
-      });
-    }
-
-    // Get real USDT balances from blockchain
+    // Get real USDT balances using existing services
     logger.info("Fetching real USDT balances from blockchain");
     const balancesWithRealUsdt = await Promise.all(
       balances.map(async (wallet: AdminWalletBalance) => {
         try {
           let realUsdtBalance = "0.00";
+          // Use existing services based on chain type
+          switch (wallet.chain) {
+            case "ethereum":
+            case "bsc":
+              try {
+                realUsdtBalance = await EVMService.getUserUSDTBalance(
+                  wallet.chain,
+                  wallet.address
+                );
+              } catch (error) {
+                logger.warn(`Failed to fetch ${wallet.chain} balance:`, error);
+                realUsdtBalance = wallet.usdtBalance || "0.00";
+              }
+              break;
 
-          // Get USDT balance using balanceOf method from smart contract
-          try {
-            switch (wallet.chain) {
-              case "ethereum":
-              case "bsc":
-                try {
-                  // Use ethers.js to call balanceOf on EVM chains
-                  const provider = new ethers.JsonRpcProvider(
-                    rpcEndpoints[wallet.chain]
-                  );
-                  const contract = new ethers.Contract(
-                    usdtContracts[wallet.chain],
-                    usdtAbi,
-                    provider
+            case "tron":
+              try {
+                console.log(
+                  `\n=== TRON Balance Check for ${wallet.address} ===`
+                );
+                console.log(`Stored balance: ${wallet.usdtBalance}`);
+                console.log(
+                  `Stored balance type: ${typeof wallet.usdtBalance}`
+                );
+
+                // Use direct TRON API instead of TronService for more reliability
+                const { getChainConfig } = await import(
+                  "../../../../lib/utils/chainUtils"
+                );
+                const config = getChainConfig("tron");
+                console.log(`USDT contract address: ${config.usdt}`);
+                console.log(
+                  `Expected TRON API structure: trc20: [{"${config.usdt}": "balance"}]`
+                );
+
+                // First try the general tokens endpoint
+                let tronResponse = await fetch(
+                  `https://api.trongrid.io/v1/accounts/${wallet.address}/tokens/trc20`,
+                  {
+                    method: "GET",
+                    headers: { Accept: "application/json" },
+                    signal: AbortSignal.timeout(10000), // 10 second timeout
+                  }
+                );
+
+                if (tronResponse.ok) {
+                  const tronData = await tronResponse.json();
+                  console.log(
+                    "TRON API response:",
+                    JSON.stringify(tronData, null, 2)
                   );
 
-                  const balance = await contract.balanceOf(wallet.address);
-                  const decimals = await contract.decimals();
+                  if (tronData.data && tronData.data.length > 0) {
+                    // TRON API returns trc20 as array of objects with contract addresses as keys
+                    const trc20Data = tronData.data[0].trc20;
+                    console.log("TRC20 data:", trc20Data);
 
-                  // Convert from wei to human readable format
-                  realUsdtBalance = ethers
-                    .formatUnits(balance, decimals)
-                    .toString();
-                } catch (error) {
-                  logger.warn(
-                    `Failed to fetch ${wallet.chain} balance:`,
-                    error
+                    if (trc20Data && Array.isArray(trc20Data)) {
+                      // Find the USDT token data
+                      const usdtTokenData = trc20Data.find((tokenObj: any) => {
+                        // Check if this object contains the USDT contract address as a key
+                        return Object.keys(tokenObj).includes(config.usdt);
+                      });
+
+                      if (usdtTokenData) {
+                        console.log("Found USDT token data:", usdtTokenData);
+                        // Get the balance value using the contract address as key
+                        const rawBalance = usdtTokenData[config.usdt];
+                        console.log("Raw balance from USDT token:", rawBalance);
+
+                        if (rawBalance) {
+                          // USDT has 6 decimals on TRON
+                          realUsdtBalance = (
+                            parseInt(rawBalance) / 1000000
+                          ).toFixed(2);
+                          console.log(
+                            `Raw balance: ${rawBalance}, Converted: ${realUsdtBalance}`
+                          );
+                        } else {
+                          console.log("No balance found in USDT token data");
+                        }
+                      } else {
+                        console.log("USDT token not found in TRC20 data");
+                      }
+                    } else {
+                      console.log("No TRC20 data found in response");
+                    }
+                  } else {
+                    console.log("No account data in TRON response");
+                  }
+                } else {
+                  console.log(
+                    `TRON API failed with status: ${tronResponse.status}`
                   );
-                  // Fallback to stored balance if contract call fails
-                  realUsdtBalance = wallet.usdtBalance || "0.00";
                 }
-                break;
 
-              case "tron":
-                // TRON still uses HTTP API since it's not EVM compatible
-                try {
-                  // First try the general tokens endpoint
-                  let tronResponse = await fetch(
-                    `https://api.trongrid.io/v1/accounts/${wallet.address}/tokens/trc20`
+                // Fallback: Try the contract-specific endpoint if still no balance
+                if (realUsdtBalance === "0.00") {
+                  console.log("Trying contract-specific endpoint...");
+                  tronResponse = await fetch(
+                    `https://api.trongrid.io/v1/accounts/${wallet.address}/tokens/trc20?contract_address=${config.usdt}`,
+                    {
+                      method: "GET",
+                      headers: { Accept: "application/json" },
+                      signal: AbortSignal.timeout(10000), // 10 second timeout
+                    }
                   );
 
                   if (tronResponse.ok) {
                     const tronData = await tronResponse.json();
-                    if (tronData.data && tronData.data.length > 0) {
-                      // Find USDT token (TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t)
-                      const usdtToken = tronData.data.find(
-                        (token: any) =>
-                          token.contract_address === usdtContracts.tron
-                      );
-                      if (usdtToken) {
-                        // USDT has 6 decimals on TRON
-                        const rawBalance = parseInt(usdtToken.balance);
-                        realUsdtBalance = (rawBalance / 1000000).toFixed(2);
-                      }
-                    }
-                  }
-
-                  // Fallback: Try the contract-specific endpoint
-                  if (realUsdtBalance === "0.00") {
-                    tronResponse = await fetch(
-                      `https://api.trongrid.io/v1/accounts/${wallet.address}/tokens/trc20?contract_address=${usdtContracts.tron}`
+                    console.log(
+                      "Contract-specific response:",
+                      JSON.stringify(tronData, null, 2)
                     );
 
-                    if (tronResponse.ok) {
-                      const tronData = await tronResponse.json();
-                      if (tronData.data && tronData.data.length > 0) {
-                        // USDT has 6 decimals on TRON
-                        const rawBalance = parseInt(tronData.data[0].balance);
-                        realUsdtBalance = (rawBalance / 1000000).toFixed(2);
+                    if (tronData.data && tronData.data.length > 0) {
+                      // Contract-specific endpoint returns the same structure
+                      const trc20Data = tronData.data[0].trc20;
+                      console.log("Contract-specific TRC20 data:", trc20Data);
+
+                      if (trc20Data && Array.isArray(trc20Data)) {
+                        const usdtTokenData = trc20Data.find(
+                          (tokenObj: any) => {
+                            return Object.keys(tokenObj).includes(config.usdt);
+                          }
+                        );
+
+                        if (usdtTokenData) {
+                          console.log(
+                            "Found USDT token in contract-specific data:",
+                            usdtTokenData
+                          );
+                          const rawBalance = usdtTokenData[config.usdt];
+
+                          if (rawBalance) {
+                            // USDT has 6 decimals on TRON
+                            realUsdtBalance = (
+                              parseInt(rawBalance) / 1000000
+                            ).toFixed(2);
+                            console.log(
+                              `Fallback - Raw balance: ${rawBalance}, Converted: ${realUsdtBalance}`
+                            );
+                          }
+                        }
                       }
                     }
                   }
-
-                  // If still no balance found, keep the stored balance
-                  if (realUsdtBalance === "0.00") {
-                    realUsdtBalance = wallet.usdtBalance || "0.00";
-                  }
-                } catch (tronError) {
-                  logger.warn(
-                    `TRON API failed for ${wallet.address}:`,
-                    tronError
-                  );
-                  realUsdtBalance = wallet.usdtBalance || "0.00";
                 }
-                break;
 
-              default:
-                realUsdtBalance = wallet.usdtBalance;
-            }
-          } catch (error) {
-            logger.warn(
-              `Failed to fetch balance for ${wallet.address} on ${wallet.chain}:`,
-              error
-            );
-            // Keep default "0.00" if contract call fails
+                // If still no balance found, keep the stored balance
+                if (realUsdtBalance === "0.00") {
+                  console.log("Using stored balance as fallback");
+                  // Check if stored balance is in raw format (like "1000000" = 1 USDT)
+                  if (
+                    wallet.usdtBalance &&
+                    !isNaN(parseFloat(wallet.usdtBalance))
+                  ) {
+                    const storedBalance = parseFloat(wallet.usdtBalance);
+                    console.log(`Stored balance parsed: ${storedBalance}`);
+
+                    // Check if it's in raw format (6 decimals) or already in USDT format
+                    if (storedBalance >= 1000000) {
+                      // Likely in raw format, convert to USDT
+                      realUsdtBalance = (storedBalance / 1000000).toFixed(2);
+                      console.log(
+                        `Converted stored balance from raw: ${storedBalance} -> ${realUsdtBalance} USDT`
+                      );
+                    } else if (storedBalance >= 1) {
+                      // Likely already in USDT format
+                      realUsdtBalance = storedBalance.toFixed(2);
+                      console.log(
+                        `Using stored balance as USDT: ${realUsdtBalance}`
+                      );
+                    } else if (storedBalance > 0) {
+                      // Small amount, might be in USDT format
+                      realUsdtBalance = storedBalance.toFixed(6);
+                      console.log(
+                        `Using stored balance as small USDT amount: ${realUsdtBalance}`
+                      );
+                    } else {
+                      realUsdtBalance = "0.00";
+                      console.log(
+                        `Stored balance is 0 or negative: ${storedBalance}`
+                      );
+                    }
+                  } else {
+                    realUsdtBalance = wallet.usdtBalance || "0.00";
+                    console.log(
+                      `Using stored balance fallback: ${realUsdtBalance}`
+                    );
+                  }
+                }
+
+                console.log(
+                  `Final TRON balance for ${wallet.address}: ${realUsdtBalance}`
+                );
+                console.log(`=== End TRON Balance Check ===\n`);
+              } catch (error) {
+                logger.warn(`Failed to fetch TRON balance:`, error);
+                console.error("TRON balance fetch error:", error);
+                realUsdtBalance = wallet.usdtBalance || "0.00";
+              }
+              break;
+
+            default:
+              realUsdtBalance = wallet.usdtBalance || "0.00";
           }
 
           return {
@@ -206,7 +280,7 @@ export async function GET(request: NextRequest) {
           );
           return {
             ...wallet,
-            realUsdtBalance: wallet.usdtBalance,
+            realUsdtBalance: wallet.usdtBalance || "0.00",
             lastUpdated: new Date().toISOString(),
             error: "Failed to fetch real balance",
           };
@@ -215,6 +289,36 @@ export async function GET(request: NextRequest) {
     );
 
     logger.info("Successfully processed all wallet balances");
+
+    // Log summary of results
+    const tronWallets = balancesWithRealUsdt.filter((w) => w.chain === "tron");
+    const evmWallets = balancesWithRealUsdt.filter(
+      (w) => w.chain === "ethereum" || w.chain === "bsc"
+    );
+
+    console.log(`\n=== BALANCE UPDATE SUMMARY ===`);
+    console.log(`Total wallets: ${balancesWithRealUsdt.length}`);
+    console.log(`TRON wallets: ${tronWallets.length}`);
+    console.log(`EVM wallets: ${evmWallets.length}`);
+
+    // Check for any wallets with 0 balance that should have balance
+    const zeroBalanceWallets = balancesWithRealUsdt.filter(
+      (w) =>
+        w.realUsdtBalance === "0.00" && parseFloat(w.usdtBalance || "0") > 0
+    );
+
+    if (zeroBalanceWallets.length > 0) {
+      console.log(
+        `⚠️  Wallets with 0 real balance but stored balance > 0: ${zeroBalanceWallets.length}`
+      );
+      zeroBalanceWallets.forEach((w) => {
+        console.log(
+          `  - ${w.address} (${w.chain}): stored=${w.usdtBalance}, real=${w.realUsdtBalance}`
+        );
+      });
+    }
+
+    console.log(`=== END SUMMARY ===\n`);
 
     return NextResponse.json({
       balances: balancesWithRealUsdt,

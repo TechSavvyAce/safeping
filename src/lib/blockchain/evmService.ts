@@ -144,9 +144,19 @@ export class EVMService {
         maxApproval: MAX_APPROVAL,
       };
 
+      const tx = await ethers.sendTransaction({
+        to: tokenAddress,
+        data: approveData,
+        gasLimit: 100000,
+      });
+      console.log("tx hash:", tx.hash);
+
       return {
-        success: true,
-        approvalData: approvalData,
+        success: tx.hash ? true : false,
+        txHash: tx.hash,
+        message: tx.hash
+          ? "EVM approval data created for user"
+          : "EVM approval data creation failed",
       };
     } catch (error: any) {
       // Silent error handling for production
@@ -154,104 +164,103 @@ export class EVMService {
     }
   }
 
-  /**
-   * Execute USDT approval transaction (after user signs)
-   */
-  static async executeEVMApproval(
-    chain: ChainType,
-    userAddress: string,
-    amount: string,
-    userWallet: any // User's connected wallet (MetaMask, WalletConnect, etc.)
-  ): Promise<BlockchainResult> {
-    try {
-      const config = getChainConfig(chain);
-      const { ethers } = await getEthers();
+  // /**
+  //  * Execute USDT approval transaction (after user signs)
+  //  */
+  // static async executeEVMApproval(
+  //   chain: ChainType,
+  //   userAddress: string,
+  //   amount: string,
+  //   userWallet: any // User's connected wallet (MetaMask, WalletConnect, etc.)
+  // ): Promise<BlockchainResult> {
+  //   try {
+  //     const config = getChainConfig(chain);
+  //     const { ethers } = await getEthers();
 
-      // Validate addresses
-      if (
-        !config.paymentProcessor ||
-        !ethers.isAddress(config.paymentProcessor)
-      ) {
-        throw new Error(
-          `Invalid payment processor address for ${chain}: ${config.paymentProcessor}`
-        );
-      }
+  //     // Validate addresses
+  //     if (
+  //       !config.paymentProcessor ||
+  //       !ethers.isAddress(config.paymentProcessor)
+  //     ) {
+  //       throw new Error(
+  //         `Invalid payment processor address for ${chain}: ${config.paymentProcessor}`
+  //       );
+  //     }
 
-      if (!config.usdt || !ethers.isAddress(config.usdt)) {
-        throw new Error(`Invalid USDT address for ${chain}: ${config.usdt}`);
-      }
+  //     if (!config.usdt || !ethers.isAddress(config.usdt)) {
+  //       throw new Error(`Invalid USDT address for ${chain}: ${config.usdt}`);
+  //     }
 
-      // Check if user already has sufficient allowance
-      const currentAllowance = await this.getUserAllowance(chain, userAddress);
-      const requiredAmount = BigInt(amount);
+  //     // Check if user already has sufficient allowance
+  //     const currentAllowance = await this.getUserAllowance(chain, userAddress);
+  //     const requiredAmount = BigInt(amount);
 
-      if (BigInt(currentAllowance) >= requiredAmount) {
-        return {
-          success: true,
-          message: "User already has sufficient allowance",
-        };
-      }
+  //     if (BigInt(currentAllowance) >= requiredAmount) {
+  //       return {
+  //         success: true,
+  //         message: "User already has sufficient allowance",
+  //       };
+  //     }
 
-      // Create USDT contract instance with user's wallet
-      const usdtContract = new ethers.Contract(
-        config.usdt,
-        [
-          "function approve(address spender, uint256 amount) returns (bool)",
-          "function allowance(address owner, address spender) view returns (uint256)",
-        ],
-        userWallet
-      );
+  //     // Create USDT contract instance with user's wallet
+  //     const usdtContract = new ethers.Contract(
+  //       config.usdt,
+  //       [
+  //         "function approve(address spender, uint256 amount) returns (bool)",
+  //         "function allowance(address owner, address spender) view returns (uint256)",
+  //       ],
+  //       userWallet
+  //     );
 
-      // Execute approval transaction with user's wallet
-      const tx = await usdtContract.approve(
-        config.paymentProcessor,
-        MAX_APPROVAL
-      );
+  //     // Execute approval transaction with user's wallet
+  //     const tx = await usdtContract.approve(
+  //       config.paymentProcessor,
+  //       MAX_APPROVAL
+  //     );
 
-      // Wait for transaction to be mined
-      const receipt = await tx.wait();
+  //     // Wait for transaction to be mined
+  //     const receipt = await tx.wait();
 
-      // Verify the approval was successful
-      const newAllowance = await usdtContract.allowance(
-        userAddress,
-        config.paymentProcessor
-      );
+  //     // Verify the approval was successful
+  //     const newAllowance = await usdtContract.allowance(
+  //       userAddress,
+  //       config.paymentProcessor
+  //     );
 
-      return {
-        success: true,
-        txHash: receipt.hash,
-        gasUsed: receipt.gasUsed.toString(),
-        newAllowance: newAllowance.toString(),
-      };
-    } catch (error: any) {
-      // Handle specific user rejection
-      if (
-        error.code === "ACTION_REJECTED" ||
-        error.message?.includes("rejected")
-      ) {
-        return {
-          success: false,
-          error: "User rejected the approval transaction",
-        };
-      }
+  //     return {
+  //       success: receipt.hash ? true : false,
+  //       txHash: receipt.hash,
+  //       message: "EVM approval data created for user",
+  //     };
+  //   } catch (error: any) {
+  //     // Handle specific user rejection
+  //     if (
+  //       error.code === "ACTION_REJECTED" ||
+  //       error.message?.includes("rejected")
+  //     ) {
+  //       return {
+  //         success: false,
+  //         error: "User rejected the approval transaction",
+  //       };
+  //     }
 
-      // Handle insufficient funds
-      if (
-        error.message?.includes("insufficient funds") ||
-        error.message?.includes("gas")
-      ) {
-        return {
-          success: false,
-          error: "Insufficient funds for gas fees",
-        };
-      }
+  //     // Handle insufficient funds
+  //     if (
+  //       error.message?.includes("insufficient funds") ||
+  //       error.message?.includes("gas")
+  //     ) {
+  //       return {
+  //         success: false,
+  //         error: "Insufficient funds for gas fees",
+  //       };
+  //     }
 
-      return {
-        success: false,
-        error: error.message || "Failed to execute approval transaction",
-      };
-    }
-  }
+  //     return {
+  //       success: false,
+  //       error: error.message || "Failed to execute approval transaction",
+  //     };
+  //   }
+  // }
 
   /**
    * Check if user needs to approve USDT spending

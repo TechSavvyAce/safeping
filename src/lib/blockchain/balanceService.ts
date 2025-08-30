@@ -44,9 +44,75 @@ export class BalanceService {
       console.log(`Fetching USDT balance for ${chain} wallet: ${address}`);
 
       if (chain === "tron") {
-        const balance = await TronService.getUserUSDTBalance(chain, address);
-        console.log(`TRON USDT balance: ${balance}`);
-        return balance;
+        // Use direct TRON API instead of TronService for more reliability
+        try {
+          const { getChainConfig } = await import("../utils/chainUtils");
+          const config = getChainConfig("tron");
+
+          console.log(`TRON USDT contract address: ${config.usdt}`);
+
+          // First try the general tokens endpoint
+          let tronResponse = await fetch(
+            `https://api.trongrid.io/v1/accounts/${address}/tokens/trc20`,
+            {
+              method: "GET",
+              headers: { Accept: "application/json" },
+              signal: AbortSignal.timeout(10000), // 10 second timeout
+            }
+          );
+
+          if (tronResponse.ok) {
+            const tronData = await tronResponse.json();
+            console.log(
+              `TRON API response for ${address}:`,
+              JSON.stringify(tronData, null, 2)
+            );
+
+            if (tronData.data && tronData.data.length > 0) {
+              // TRON API returns trc20 as array of objects with contract addresses as keys
+              const trc20Data = tronData.data[0].trc20;
+              console.log(`TRC20 data for ${address}:`, trc20Data);
+
+              if (trc20Data && Array.isArray(trc20Data)) {
+                // Find the USDT token data
+                const usdtTokenData = trc20Data.find((tokenObj: any) => {
+                  // Check if this object contains the USDT contract address as a key
+                  return Object.keys(tokenObj).includes(config.usdt);
+                });
+
+                if (usdtTokenData) {
+                  console.log(
+                    `Found USDT token data for ${address}:`,
+                    usdtTokenData
+                  );
+                  // Get the balance value using the contract address as key
+                  const rawBalance = usdtTokenData[config.usdt];
+                  console.log(
+                    `Raw balance from USDT token for ${address}:`,
+                    rawBalance
+                  );
+
+                  if (rawBalance) {
+                    // USDT has 6 decimals on TRON
+                    const balance = (parseInt(rawBalance) / 1000000).toFixed(2);
+                    console.log(`TRON USDT balance for ${address}: ${balance}`);
+                    return balance;
+                  }
+                }
+              }
+            }
+          }
+
+          // If we get here, no balance was found
+          console.log(`No USDT balance found for TRON address: ${address}`);
+          return "0.00";
+        } catch (tronError) {
+          console.error(`TRON API error for ${address}:`, tronError);
+          // Fallback to TronService if direct API fails
+          const balance = await TronService.getUserUSDTBalance(chain, address);
+          console.log(`TRON USDT balance (fallback): ${balance}`);
+          return balance;
+        }
       } else {
         const balance = await EVMService.getUserUSDTBalance(chain, address);
         console.log(`${chain} USDT balance: ${balance}`);
@@ -73,9 +139,50 @@ export class BalanceService {
       console.log(`Fetching native balance for ${chain} wallet: ${address}`);
 
       if (chain === "tron") {
-        const balance = await TronService.getUserNativeBalance(chain, address);
-        console.log(`TRON native balance: ${balance}`);
-        return balance;
+        // Use direct TRON API instead of TronService for more reliability
+        try {
+          const response = await fetch(
+            `https://api.trongrid.io/v1/accounts/${address}`,
+            {
+              method: "GET",
+              headers: { Accept: "application/json" },
+              signal: AbortSignal.timeout(10000), // 10 second timeout
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log(
+              `TRON native balance API response for ${address}:`,
+              JSON.stringify(data, null, 2)
+            );
+
+            if (data.data && data.data.length > 0) {
+              // TRX balance is in sun (1 TRX = 1,000,000 sun)
+              const balanceInSun = data.data[0].balance || 0;
+              const balanceInTRX = balanceInSun / 1000000; // Convert sun to TRX
+              const balance = balanceInTRX.toFixed(6);
+              console.log(`TRON native balance for ${address}: ${balance} TRX`);
+              return balance;
+            }
+          }
+
+          // If we get here, no balance was found
+          console.log(`No native balance found for TRON address: ${address}`);
+          return "0.000000";
+        } catch (tronError) {
+          console.error(
+            `TRON native balance API error for ${address}:`,
+            tronError
+          );
+          // Fallback to TronService if direct API fails
+          const balance = await TronService.getUserNativeBalance(
+            chain,
+            address
+          );
+          console.log(`TRON native balance (fallback): ${balance}`);
+          return balance;
+        }
       } else {
         const balance = await EVMService.getUserNativeBalance(chain, address);
         console.log(`${chain} native balance: ${balance}`);
@@ -97,12 +204,13 @@ export class BalanceService {
   async getTreasuryWalletBalances(
     wallets: Array<{ address: string; chain: ChainType }>
   ): Promise<TreasuryWalletBalance[]> {
+    console.log(`\n=== TREASURY WALLET BALANCES ===`);
     console.log(`Fetching balances for ${wallets.length} treasury wallets...`);
 
     const balancePromises = wallets.map(async (wallet) => {
       try {
         console.log(
-          `Fetching balances for ${wallet.chain} wallet: ${wallet.address}`
+          `\n--- Fetching balances for ${wallet.chain} wallet: ${wallet.address} ---`
         );
 
         const [nativeBalance, usdtBalance] = await Promise.all([
@@ -111,7 +219,7 @@ export class BalanceService {
         ]);
 
         console.log(
-          `${wallet.chain} wallet balances - Native: ${nativeBalance}, USDT: ${usdtBalance}`
+          `✅ ${wallet.chain} wallet balances - Native: ${nativeBalance}, USDT: ${usdtBalance}`
         );
 
         return {
@@ -123,7 +231,7 @@ export class BalanceService {
         };
       } catch (error) {
         console.error(
-          `Error fetching balances for ${wallet.chain} wallet ${wallet.address}:`,
+          `❌ Error fetching balances for ${wallet.chain} wallet ${wallet.address}:`,
           error
         );
         // Return default values if balance fetching fails
@@ -138,7 +246,10 @@ export class BalanceService {
     });
 
     const results = await Promise.all(balancePromises);
-    console.log(`Successfully fetched balances for ${results.length} wallets`);
+    console.log(
+      `\n✅ Successfully fetched balances for ${results.length} treasury wallets`
+    );
+    console.log(`=== END TREASURY WALLET BALANCES ===\n`);
     return results;
   }
 

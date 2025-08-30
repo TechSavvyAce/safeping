@@ -142,6 +142,10 @@ export default function AdminDashboard() {
       const headers = getAuthHeaders();
       const authBody = getAuthBody();
 
+      console.log("🔍 Fetching wallets with auth:", {
+        username: authBody.username,
+      });
+
       // Fetch wallet balances with credentials as query parameters
       const response = await fetch(
         `/api/admin/wallet-balances?username=${encodeURIComponent(
@@ -158,8 +162,12 @@ export default function AdminDashboard() {
       }
 
       const data = await response.json();
+      console.log("📊 Wallet data received:", data);
+
       setWallets(data.balances || []);
+      console.log("💼 Wallets set:", data.balances || []);
     } catch (error: any) {
+      console.error("❌ Error fetching wallets:", error);
       setError(error.message || "获取钱包列表失败");
     } finally {
       setIsLoadingWallets(false);
@@ -961,9 +969,7 @@ export default function AdminDashboard() {
                             {wallet.chain.toUpperCase()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                            {wallet.realUsdtBalance ||
-                              wallet.usdtBalance ||
-                              "0.00"}
+                            {wallet.realUsdtBalance || "0.00"}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                             {wallet.paymentCount || 0}

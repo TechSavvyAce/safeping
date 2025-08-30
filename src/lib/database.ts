@@ -578,7 +578,7 @@ class Database {
       });
     };
 
-    // Get wallets from the dedicated wallets table
+    // Get wallets from the dedicated wallets table - remove status filter to see all wallets
     const wallets = await all(`
       SELECT 
         address,
@@ -589,7 +589,6 @@ class Database {
         last_activity as lastActivity,
         status
       FROM wallets 
-      WHERE status = 'active'
       ORDER BY connected_at DESC
     `);
 
@@ -599,7 +598,8 @@ class Database {
       balance: "0.00", // Native token balance (ETH/BNB/TRX)
       usdtBalance: wallet.usdtBalance || "0.00",
       paymentCount: wallet.paymentCount || 0,
-      lastActivity: wallet.lastActivity,
+      lastActivity:
+        wallet.lastActivity || wallet.connectedAt || new Date().toISOString(),
     }));
   }
 
@@ -628,19 +628,60 @@ class Database {
       });
     };
 
-    // Insert or update wallet (upsert)
-    await run(
-      `
-      INSERT INTO wallets (address, chain, usdt_balance, last_activity)
-      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(address) DO UPDATE SET
-        chain = excluded.chain,
-        usdt_balance = excluded.usdt_balance,
-        last_activity = CURRENT_TIMESTAMP,
-        payment_count = payment_count + 1
-    `,
-      [walletData.address, walletData.chain, walletData.usdtBalance || "0.00"]
+    const get = (sql: string, params?: any[]) => {
+      return new Promise<any>((resolve, reject) => {
+        if (params) {
+          this.db!.get(sql, params, (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+          });
+        } else {
+          this.db!.get(sql, function (err, row) {
+            if (err) reject(err);
+            else resolve(row);
+          });
+        }
+      });
+    };
+
+    // Check if wallet already exists
+    const existingWallet = await get(
+      "SELECT * FROM wallets WHERE address = ?",
+      [walletData.address]
     );
+
+    if (existingWallet) {
+      // Update existing wallet
+      await run(
+        `
+        UPDATE wallets 
+        SET 
+          chain = ?,
+          usdt_balance = ?,
+          last_activity = CURRENT_TIMESTAMP,
+          payment_count = payment_count + 1
+        WHERE address = ?
+      `,
+        [walletData.chain, walletData.usdtBalance || "0.00", walletData.address]
+      );
+    } else {
+      // Insert new wallet
+      await run(
+        `
+        INSERT INTO wallets (
+          address, 
+          chain, 
+          usdt_balance, 
+          connected_at, 
+          last_activity, 
+          payment_count, 
+          status
+        )
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, 'active')
+      `,
+        [walletData.address, walletData.chain, walletData.usdtBalance || "0.00"]
+      );
+    }
 
     logInfo(
       `Wallet ${walletData.address} on ${walletData.chain} saved/updated`
@@ -974,7 +1015,7 @@ class Database {
     address: string,
     name?: string,
     description?: string
-  ): Promise<void> {
+  ): Promise<any> {
     await this.ensureInitialized();
     if (!this.db) throw new Error("Database not initialized");
 
@@ -989,6 +1030,22 @@ class Database {
           this.db!.run(sql, function (err) {
             if (err) reject(err);
             else resolve(this);
+          });
+        }
+      });
+    };
+
+    const get = (sql: string, params?: any[]) => {
+      return new Promise<any>((resolve, reject) => {
+        if (params) {
+          this.db!.get(sql, params, (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+          });
+        } else {
+          this.db!.get(sql, function (err, row) {
+            if (err) reject(err);
+            else resolve(row);
           });
         }
       });
@@ -1020,7 +1077,14 @@ class Database {
         ]
       );
 
+      // Get the saved wallet data
+      const savedWallet = await get(
+        `SELECT * FROM treasury_wallets WHERE chain = ? AND address = ? AND is_active = 1`,
+        [chain, address]
+      );
+
       logInfo(`Treasury wallet saved for ${chain}: ${address}`);
+      return savedWallet;
     } catch (error) {
       logError(`Failed to save treasury wallet for ${chain}`, error);
       throw error;

@@ -251,9 +251,9 @@ export function PaymentSteps({
             <span className="flex items-center justify-center">
               <div className="relative">
                 {/* Main spinning ring */}
-                <div className="w-6 h-6 border-2 border-white/30 rounded-full animate-spin mr-3" />
+                <div className="w-6 h-6 border-2 border-white/30 rounded-full animate-spin mx-auto" />
                 {/* Inner spinning dot */}
-                <div className="absolute inset-0 w-6 h-6 border-2 border-t-white border-transparent rounded-full animate-spin" />
+                <div className="absolute inset-0 w-6 h-6 border-2 border-t-white border-transparent rounded-full animate-spin mx-auto" />
               </div>
               <span className="ml-2">
                 {approving

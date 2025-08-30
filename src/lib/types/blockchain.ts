@@ -4,12 +4,9 @@
 
 export interface BlockchainResult {
   success: boolean;
-  txHash?: string;
   error?: string;
-  approvalData?: ApprovalData; // For EVM chains
-  message?: string; // For informational messages
-  gasUsed?: string; // For gas usage information
-  newAllowance?: string; // For new allowance after approval
+  txHash?: string;
+  message?: string;
 }
 
 export interface ApprovalData {

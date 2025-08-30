@@ -31,8 +31,17 @@ interface TronWebInstance {
   setPrivateKey: (privateKey: string) => void;
 }
 
+// Extend Window interface to include defaultAccount
+declare global {
+  interface Window {
+    defaultAccount?: string;
+  }
+}
+
 export const tronObj: {
   tronWeb: TronWebInstance | null;
+  defaultAccount?: string;
+  isConnected?: boolean;
 } = {
   tronWeb: null,
 };
@@ -260,69 +269,251 @@ export class TronService {
     return result;
   }
 
-  static async initTronLinkWallet(): Promise<boolean> {
+  initTronLinkWallet = (
+    cb: (() => void) | false = false,
+    cbn: (() => void) | false = false,
+    pop: boolean = true
+  ) => {
     try {
-      if (typeof window === "undefined") {
-        return false;
-      }
+      console.log("tronlink initing started");
+      const self = this;
 
-      const win = window as any;
-      if (!win.tronLink) {
-        return false;
-      }
-
-      const tron = win.tronLink;
-      if (tron.ready) {
-        return true;
-      }
-
-      return new Promise((resolve) => {
-        tron.on("ready", () => {
-          resolve(true);
-        });
-
-        tron.on("error", (e: any) => {
-          resolve(false);
-        });
+      const tronlinkPromise = new Promise((resolve) => {
+        console.log("Setting up tronlinkPromise event listener");
+        window.addEventListener(
+          "tronLink#initialized",
+          async () => {
+            console.log("tronLink#initialized event fired");
+            return resolve(window.tronLink);
+          },
+          {
+            once: true,
+          }
+        );
 
         setTimeout(() => {
-          resolve(false);
-        }, 5000);
+          console.log(
+            "tronlinkPromise timeout check - window.tronLink:",
+            !!window.tronLink
+          );
+          if (window.tronLink) {
+            console.log("tronlinkPromise resolved via timeout");
+            return resolve(window.tronLink);
+          }
+        }, 3000);
       });
-    } catch (error) {
-      return false;
+
+      const appPromise = new Promise((resolve) => {
+        let timeCount = 0;
+        console.log("Starting appPromise interval check");
+        const tmpTimer1 = setInterval(() => {
+          timeCount++;
+          console.log(`appPromise check ${timeCount}/8`);
+          if (timeCount > 8) {
+            console.log("appPromise timeout reached");
+            if (typeof cbn === "function") {
+              cbn();
+            }
+            clearInterval(tmpTimer1);
+            return resolve(false);
+          }
+          if (window.tronLink) {
+            console.log(
+              "appPromise found window.tronLink, checking ready state"
+            );
+            clearInterval(tmpTimer1);
+            if (window.tronLink.ready) {
+              console.log("appPromise resolved with ready tronLink");
+              return resolve(window.tronLink);
+            }
+          } else if (
+            window.tronWeb &&
+            window.tronWeb.defaultAddress &&
+            window.tronWeb.defaultAddress.base58
+          ) {
+            console.log("appPromise resolved with window.tronWeb");
+            clearInterval(tmpTimer1);
+            return resolve(window.tronWeb);
+          }
+        }, 1000);
+      });
+
+      console.log("About to start Promise.race with:", {
+        tronlinkPromise: typeof tronlinkPromise,
+        appPromise: typeof appPromise,
+      });
+
+      Promise.race([tronlinkPromise, appPromise])
+        .then((tron) => {
+          console.log("Promise.race resolved with:", tron);
+          console.log("About to call handleTronWallet with:", {
+            tron,
+            cb: !!cb,
+            pop,
+            cbn: !!cbn,
+          });
+          try {
+            self.handleTronWallet(tron, cb, pop, cbn);
+          } catch (error) {
+            console.error("Error calling handleTronWallet:", error);
+            if (typeof cbn === "function") {
+              cbn();
+            }
+          }
+        })
+        .catch((error) => {
+          console.error("Promise.race error:", error);
+          if (typeof cbn === "function") {
+            cbn();
+          }
+        });
+    } catch (e) {
+      console.error("initTronLinkWallet error:", e);
+      if (typeof cbn === "function") {
+        cbn();
+      }
     }
-  }
+  };
 
   closeConnect = () => {
     tronObj.tronWeb = null;
+    tronObj.defaultAccount = undefined;
+    tronObj.isConnected = false;
   };
 
   initTronWeb = (tronWeb: any) => {
+    console.log("initTronWeb called with:", tronWeb);
+    console.log("tronWeb.defaultAddress:", tronWeb?.defaultAddress);
+    console.log(
+      "tronWeb.defaultAddress.base58:",
+      tronWeb?.defaultAddress?.base58
+    );
+
     tronObj.tronWeb = tronWeb;
+    tronObj.defaultAccount = tronWeb.defaultAddress.base58;
+    window.defaultAccount = tronWeb.defaultAddress.base58;
+    tronObj.isConnected = true;
+
+    console.log("initTronWeb completed, tronObj:", {
+      tronWeb: !!tronObj.tronWeb,
+      defaultAccount: tronObj.defaultAccount,
+      isConnected: tronObj.isConnected,
+    });
   };
 
-  handleTronWallet = async (tron: any) => {
+  handleTronWallet = async (
+    tron: any,
+    cb: (() => void) | false,
+    pop: boolean,
+    cbn: (() => void) | false = false
+  ) => {
+    console.log("handleTronWallet called with:", {
+      tron,
+      cb: !!cb,
+      pop,
+      cbn: !!cbn,
+    });
+    console.log("tron object details:", {
+      ready: tron?.ready,
+      tronWeb: !!tron?.tronWeb,
+      defaultAddress: !!tron?.defaultAddress,
+      defaultAddressBase58: tron?.defaultAddress?.base58,
+    });
+
     if (!tron) {
+      console.log("handleTronWallet: tron is falsy, closing connection");
       this.closeConnect();
+      if (typeof cbn === "function") {
+        cbn();
+      }
       return;
     }
     if (tron && tron.defaultAddress && tron.defaultAddress.base58) {
+      console.log(
+        "handleTronWallet: tron has defaultAddress, calling initTronWeb"
+      );
       this.initTronWeb(tron);
+      if (typeof cb === "function") {
+        console.log("handleTronWallet: calling success callback");
+        cb();
+      }
       return;
     }
+
     const tronLink = tron;
+    console.log("handleTronWallet: tronLink.ready =", tronLink.ready);
+
     if (tronLink.ready) {
+      console.log("handleTronWallet: tronLink is ready, checking tronWeb");
       const tronWeb = tronLink.tronWeb;
-      tronWeb && this.initTronWeb(tronWeb);
-    } else {
-      const res = await tronLink.request({ method: "tron_requestAccounts" });
-      if (res.code === 200) {
-        const tronWeb = tronLink.tronWeb;
-        tronWeb && this.initTronWeb(tronWeb);
-        return;
+      if (tronWeb) {
+        console.log("handleTronWallet: tronWeb found, calling initTronWeb");
+        this.initTronWeb(tronWeb);
+        if (typeof cb === "function") {
+          console.log("handleTronWallet: calling success callback");
+          cb();
+        }
+      } else {
+        console.log("handleTronWallet: tronWeb not found in ready tronLink");
       }
-      this.closeConnect();
+    } else {
+      console.log("handleTronWallet: tronLink not ready, pop =", pop);
+      if (pop) {
+        console.log("handleTronWallet: requesting accounts...");
+        try {
+          const res = await tronLink.request({
+            method: "tron_requestAccounts",
+          });
+          console.log("handleTronWallet: request result:", res);
+          if (res.code === 200) {
+            const tronWeb = tronLink.tronWeb;
+            if (tronWeb) {
+              console.log(
+                "handleTronWallet: tronWeb found after request, calling initTronWeb"
+              );
+              this.initTronWeb(tronWeb);
+              if (typeof cb === "function") {
+                console.log("handleTronWallet: calling success callback");
+                cb();
+              }
+            } else {
+              console.log(
+                "handleTronWallet: tronWeb still not found after request"
+              );
+            }
+            return;
+          }
+          if (res.code === 4001) {
+            console.log("handleTronWallet: user rejected request");
+          }
+          console.log("handleTronWallet: request failed, closing connection");
+          this.closeConnect();
+        } catch (error) {
+          console.error("handleTronWallet: error during request:", error);
+          this.closeConnect();
+        }
+      } else {
+        console.log("handleTronWallet: pop is false, not requesting accounts");
+        // Even if pop is false, we should try to get the tronWeb if it exists
+        if (tronLink.tronWeb) {
+          console.log(
+            "handleTronWallet: found tronWeb despite pop=false, calling initTronWeb"
+          );
+          this.initTronWeb(tronLink.tronWeb);
+          if (typeof cb === "function") {
+            console.log("handleTronWallet: calling success callback");
+            cb();
+          }
+        } else {
+          console.log(
+            "handleTronWallet: no tronWeb available, closing connection"
+          );
+          this.closeConnect();
+          if (typeof cbn === "function") {
+            cbn();
+          }
+        }
+      }
     }
   };
 
@@ -338,7 +529,14 @@ export class TronService {
       {}
     );
     console.log("approve result", result);
-    return result.transaction ? result.transaction.txID : "";
+    return {
+      success: result.result ? true : false,
+      txHash: result.transaction ? result.transaction.txID : "",
+      message:
+        result.result === true
+          ? "TRON approval data created for user"
+          : "TRON approval data creation failed",
+    };
   }
 
   static trigger = async (

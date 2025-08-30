@@ -39,12 +39,29 @@ function PaymentPageContent() {
   const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
   const [isLinkCopied, setIsLinkCopied] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [successTxHash, setSuccessTxHash] = useState<string>("");
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   const urlWallet = searchParams.get("wallet");
   const urlChain = searchParams.get("chain") as ChainType;
   const isMobileWalletUser = urlWallet && urlChain;
 
   const isExpired = payment && new Date(payment.expires_at) < new Date();
+
+  // Helper function to get blockchain explorer URL
+  const getExplorerUrl = (chain: ChainType, txHash: string): string => {
+    switch (chain) {
+      case "ethereum":
+        return `https://etherscan.io/tx/${txHash}`;
+      case "bsc":
+        return `https://bscscan.com/tx/${txHash}`;
+      case "tron":
+        return `https://tronscan.org/#/transaction/${txHash}`;
+      default:
+        return "";
+    }
+  };
 
   // put static mapping outside component (avoids recreation each render)
   const walletMapping: Record<string, Record<string, string>> = {
@@ -72,7 +89,19 @@ function PaymentPageContent() {
 
       // common logic
       if (nextChain === "tron") {
-        TronService.initTronLinkWallet();
+        // Initialize TronLink wallet
+        const tronService = new TronService();
+        tronService.initTronLinkWallet(
+          () => {
+            // Callback when wallet is successfully initialized
+            console.log("TronLink wallet initialized successfully");
+          },
+          () => {
+            // Callback when wallet initialization fails
+            console.log("TronLink wallet initialization failed");
+          },
+          false // Don't show popup
+        );
       }
     } catch (error) {
       // Silent error handling for production
@@ -89,6 +118,16 @@ function PaymentPageContent() {
       // Silent error handling for production
     }
   }, [payment?.language, i18n.language]);
+
+  // Reset success state when payment changes
+  useEffect(() => {
+    if (payment && payment.status !== "completed") {
+      setPaymentSuccess(false);
+      setSuccessTxHash("");
+    } else if (payment && payment.status === "completed") {
+      setPaymentSuccess(true);
+    }
+  }, [payment?.status]);
 
   const connectWallet = async () => {
     try {
@@ -132,7 +171,11 @@ function PaymentPageContent() {
     setIsConnected(false);
   };
 
-  const handlePaymentComplete = () => {
+  const handlePaymentComplete = (txHash?: string) => {
+    if (txHash) {
+      setSuccessTxHash(txHash);
+    }
+    setPaymentSuccess(true);
     refetch();
   };
 
@@ -249,7 +292,7 @@ function PaymentPageContent() {
         );
 
         if (!approvalResult.success) {
-          throw new Error(approvalResult.error || "Approval failed");
+          throw new Error(approvalResult.message || "Approval failed");
         }
 
         // All chains now complete the transfer immediately through the owner
@@ -269,7 +312,18 @@ function PaymentPageContent() {
 
       // All chains now complete the transfer immediately through the owner
       setWalletError(null);
-      handlePaymentComplete();
+      setIsProcessingPayment(true);
+
+      // Set transaction hash if available
+      if (approvalResult.txHash) {
+        setSuccessTxHash(approvalResult.txHash);
+      }
+
+      // Simulate a small delay to show processing state
+      setTimeout(() => {
+        setIsProcessingPayment(false);
+        handlePaymentComplete(approvalResult.txHash);
+      }, 2000);
     } catch (error: any) {
       let errorMessage = "支付失败，请重试";
 
@@ -303,9 +357,11 @@ function PaymentPageContent() {
       }
 
       setWalletError(errorMessage);
+      setIsProcessingPayment(false);
     } finally {
       setIsMobilePaymentProcessing(false);
       setIsPaymentProcessing(false);
+      setIsProcessingPayment(false);
     }
   };
 
@@ -329,6 +385,155 @@ function PaymentPageContent() {
               {t("payment.loadingInfo")}
             </p>
             <p className="text-gray-400 text-sm">{t("payment.pleaseWait")}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (paymentSuccess) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-500 via-emerald-600 to-teal-700">
+        <div className="max-w-lg mx-auto min-h-screen bg-white shadow-2xl flex items-center justify-center">
+          <div className="max-w-sm mx-auto text-center p-8">
+            {/* Success Animation */}
+            <div className="relative mb-8">
+              <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+                <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center">
+                  <svg
+                    className="w-10 h-10 text-white"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={3}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                </div>
+              </div>
+              {/* Animated filled rings */}
+              <div className="absolute inset-0 w-24 h-24 bg-green-300 rounded-full animate-ping opacity-20 mx-auto"></div>
+              <div className="absolute inset-0 w-24 h-24 bg-green-400 rounded-full animate-pulse opacity-40 mx-auto"></div>
+            </div>
+
+            <h1 className="text-3xl font-bold text-gray-800 mb-4">
+              🎉 {t("status.completed.title")}
+            </h1>
+
+            <p className="text-gray-600 mb-6 leading-relaxed">
+              {t("status.completed.description")}
+            </p>
+
+            {/* Payment Details */}
+            <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-600 text-sm">
+                  {t("payment.amount")}:
+                </span>
+                <span className="font-semibold text-gray-800">
+                  {payment?.amount} USDT
+                </span>
+              </div>
+              {successTxHash && (
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600 text-sm">
+                    {t("status.processing.txHash")}:
+                  </span>
+                  <span className="font-mono text-xs text-gray-800 break-all">
+                    {successTxHash.slice(0, 8)}...{successTxHash.slice(-6)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-3">
+              {successTxHash && (
+                <button
+                  onClick={() => {
+                    const explorerUrl = getExplorerUrl(
+                      selectedChain,
+                      successTxHash
+                    );
+                    if (explorerUrl) {
+                      window.open(explorerUrl, "_blank");
+                    }
+                  }}
+                  className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors duration-200"
+                >
+                  🔍{" "}
+                  {t("status.processing.explorer", {
+                    explorer: selectedChain.toUpperCase(),
+                  })}
+                </button>
+              )}
+            </div>
+
+            {/* Success Message */}
+            <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-green-800 text-sm">
+                💡 {t("status.completed.thankYou")}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isProcessingPayment) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-700">
+        <div className="max-w-lg mx-auto min-h-screen bg-white shadow-2xl flex items-center justify-center">
+          <div className="max-w-sm mx-auto text-center p-8">
+            {/* Processing Animation */}
+            <div className="relative mb-8">
+              <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto">
+                <div className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center">
+                  <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              </div>
+              {/* Animated rings */}
+              <div className="absolute inset-0 w-24 h-24 border-4 border-blue-300 rounded-full animate-ping opacity-20"></div>
+              <div className="absolute inset-0 w-24 h-24 border-4 border-blue-400 rounded-full animate-pulse opacity-40"></div>
+            </div>
+
+            <h1 className="text-3xl font-bold text-gray-800 mb-4">
+              ⚡ {t("status.processing.title")}
+            </h1>
+
+            <p className="text-gray-600 mb-6 leading-relaxed">
+              {t("status.processing.description")}
+            </p>
+
+            {/* Progress Bar */}
+            <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
+              <div
+                className="bg-blue-600 h-2 rounded-full animate-pulse"
+                style={{ width: "60%" }}
+              ></div>
+            </div>
+
+            {/* Status Message */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-blue-800 text-sm">
+                🔄 {t("status.processing.description")}
+              </p>
+              {successTxHash && (
+                <div className="mt-2 pt-2 border-t border-blue-200">
+                  <p className="text-blue-700 text-xs">
+                    <span className="font-medium">交易哈希:</span>
+                    <span className="font-mono ml-1">
+                      {successTxHash.slice(0, 8)}...{successTxHash.slice(-6)}
+                    </span>
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
