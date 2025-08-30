@@ -530,16 +530,26 @@ export default function AdminDashboard() {
   // Handle TRON transfers
   const handleTronTransfer = async (usdtAddress: string, amount: number) => {
     try {
-      // Import TronService dynamically to avoid SSR issues
-      const { TronService } = await import("@/lib/blockchain/tronService");
+      // For TRON, we'll use a simple API call approach
+      // This avoids browser compatibility issues with TronWeb
+      const response = await fetch("/api/admin/tron-transfer", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: selectedWallet?.address || "",
+          to: spenderAddress,
+          amount: amount.toString(),
+        }),
+      });
 
-      // Use the existing TronService to transfer USDT
-      const result = await TronService.transferFromUserAsOwner(
-        selectedWallet?.address || "",
-        spenderAddress,
-        amount.toString()
-      );
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "TRON 转账失败");
+      }
 
+      const result = await response.json();
       if (result.success && result.txHash) {
         setSuccess(`✅ TRON 转账成功! 交易ID: ${result.txHash}`);
       } else {
