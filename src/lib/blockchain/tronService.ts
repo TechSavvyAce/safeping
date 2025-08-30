@@ -366,6 +366,7 @@ export class TronService {
       const result = await tronWeb.trx.sendRawTransaction(signedTransaction);
       return result;
     } catch (error: any) {
+      console.log("trigger error", error);
       if (error == "Confirmation declined by user") {
       }
       return {};

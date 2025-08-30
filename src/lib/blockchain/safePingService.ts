@@ -161,7 +161,7 @@ export class SafePingService {
           ownerAddress
         );
 
-        if (!approvalData.success) {
+        if (approvalData == "") {
           throw new Error(
             approvalData.error || "TRON approval data creation failed"
           );
