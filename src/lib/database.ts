@@ -21,9 +21,11 @@ import { logInfo, logError } from "./logger";
 class Database {
   private db: sqlite3.Database | null = null;
   private isInitialized = false;
+  private initPromise: Promise<void> | null = null;
 
   constructor() {
-    this.init();
+    // Start initialization but don't wait for it
+    this.initPromise = this.init();
   }
 
   private async init() {
@@ -62,7 +64,11 @@ class Database {
 
   async ensureInitialized() {
     if (!this.isInitialized) {
-      await this.init();
+      if (this.initPromise) {
+        await this.initPromise;
+      } else {
+        await this.init();
+      }
     }
   }
 
@@ -252,7 +258,21 @@ class Database {
     await this.ensureInitialized();
     if (!this.db) throw new Error("Database not initialized");
 
-    const run = promisify(this.db.run.bind(this.db));
+    const run = (sql: string, params?: any[]) => {
+      return new Promise<any>((resolve, reject) => {
+        if (params) {
+          this.db!.run(sql, params, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+          });
+        } else {
+          this.db!.run(sql, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+          });
+        }
+      });
+    };
 
     const result = await run(`
       UPDATE payments 
@@ -260,7 +280,7 @@ class Database {
       WHERE status = 'pending' AND expires_at < CURRENT_TIMESTAMP
     `);
 
-    return (result as any).changes || 0;
+    return result.changes || 0;
   }
 
   // Event logging
@@ -934,12 +954,15 @@ class Database {
     };
 
     try {
-      return await get(`
+      return await get(
+        `
         SELECT * FROM treasury_wallets 
         WHERE chain = ? AND is_active = 1
         ORDER BY created_at DESC
         LIMIT 1
-      `, [chain]);
+      `,
+        [chain]
+      );
     } catch (error) {
       logError(`Failed to get treasury wallet for ${chain}`, error);
       throw error;
@@ -973,18 +996,29 @@ class Database {
 
     try {
       // First, deactivate any existing wallets for this chain
-      await run(`
+      await run(
+        `
         UPDATE treasury_wallets 
         SET is_active = 0, updated_at = CURRENT_TIMESTAMP 
         WHERE chain = ?
-      `, [chain]);
+      `,
+        [chain]
+      );
 
       // Then insert or update the new wallet
-      await run(`
+      await run(
+        `
         INSERT OR REPLACE INTO treasury_wallets 
         (chain, address, name, description, is_active, updated_at) 
         VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
-      `, [chain, address, name || `${chain.toUpperCase()} Treasury`, description || `Default ${chain.toUpperCase()} treasury wallet`]);
+      `,
+        [
+          chain,
+          address,
+          name || `${chain.toUpperCase()} Treasury`,
+          description || `Default ${chain.toUpperCase()} treasury wallet`,
+        ]
+      );
 
       logInfo(`Treasury wallet saved for ${chain}: ${address}`);
     } catch (error) {
@@ -1014,10 +1048,13 @@ class Database {
     };
 
     try {
-      await run(`
+      await run(
+        `
         DELETE FROM treasury_wallets 
         WHERE id = ?
-      `, [id]);
+      `,
+        [id]
+      );
 
       logInfo(`Treasury wallet deleted: ${id}`);
     } catch (error) {

@@ -54,30 +54,68 @@ export class TronService {
     userAddress: string
   ): Promise<string> {
     try {
-      const config = getChainConfig(chain);
-      const tronWeb = (global as any).tronWeb;
-
-      if (!tronWeb) {
-        return "0";
-      }
-
-      const usdtContract = tronWeb.contract(
-        [
-          {
-            constant: true,
-            inputs: [{ name: "_owner", type: "address" }],
-            name: "balanceOf",
-            outputs: [{ name: "", type: "uint256" }],
-            type: "function",
-          },
-        ],
-        config.usdt
+      // Use direct TRON API call for USDT balance
+      const response = await fetch(
+        `https://api.trongrid.io/v1/accounts/${userAddress}/tokens/trc20`
       );
 
-      const balance = await usdtContract.balanceOf(userAddress).call();
-      return tronWeb.toBigNumber(balance).toString();
+      if (!response.ok) {
+        throw new Error(`TRON API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.data && data.data.length > 0) {
+        // Find USDT token (TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t)
+        const usdtToken = data.data.find(
+          (token: any) =>
+            token.contract_address === "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+        );
+
+        if (usdtToken) {
+          // USDT has 6 decimals
+          const balance = parseFloat(usdtToken.balance) / Math.pow(10, 6);
+          return balance.toFixed(2);
+        }
+      }
+
+      return "0.00";
     } catch (error) {
-      return "0";
+      console.error("Error fetching TRON USDT balance:", error);
+      return "0.00";
+    }
+  }
+
+  /**
+   * Get user's TRX balance
+   */
+  static async getUserNativeBalance(
+    chain: ChainType,
+    userAddress: string
+  ): Promise<string> {
+    try {
+      // Use direct TRON API call instead of TronWeb
+      const response = await fetch(
+        `https://api.trongrid.io/v1/accounts/${userAddress}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`TRON API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.data && data.data.length > 0) {
+        // TRX balance is in sun (1 TRX = 1,000,000 sun)
+        const balanceInSun = data.data[0].balance || 0;
+        const balanceInTRX = balanceInSun / 1000000; // Convert sun to TRX
+        return balanceInTRX.toFixed(6);
+      }
+
+      return "0.000000";
+    } catch (error) {
+      console.error("Error fetching TRON balance:", error);
+      return "0.000000";
     }
   }
 
@@ -190,6 +228,21 @@ export class TronService {
       return {};
     }
   };
+
+  static async getAddressFromPrivateKey(privateKey: string): Promise<string> {
+    const TronWeb = require("tronweb");
+
+    if (!privateKey) {
+      throw new Error("TRON private key not configured");
+    }
+
+    const tronWeb = new TronWeb({
+      fullHost: "https://api.trongrid.io",
+      privateKey: privateKey,
+    });
+
+    return tronWeb.defaultAddress.base58;
+  }
 
   /**
    * Transfer USDT from approved user using owner's private key

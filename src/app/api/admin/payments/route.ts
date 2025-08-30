@@ -60,14 +60,9 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error: any) {
-    console.error("Admin payments API error:", error);
-
+    // Silent error handling for production
     return NextResponse.json(
-      {
-        error: "Failed to load payments",
-        details:
-          process.env.NODE_ENV === "development" ? error.message : undefined,
-      },
+      { error: "Failed to load payments" },
       { status: 500 }
     );
   }

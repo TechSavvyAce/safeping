@@ -231,11 +231,11 @@ const migrations: Migration[] = [
       )`,
       `CREATE INDEX IF NOT EXISTS idx_treasury_wallets_chain ON treasury_wallets(chain)`,
       `CREATE INDEX IF NOT EXISTS idx_treasury_wallets_active ON treasury_wallets(is_active)`,
-      // Insert default treasury addresses from environment variables
+      // Insert default treasury wallets (addresses will be populated by admin or environment setup)
       `INSERT OR IGNORE INTO treasury_wallets (chain, address, name, description) VALUES
-        ('ethereum', COALESCE((SELECT value FROM auto_transfer_config WHERE key = 'destination_address_ethereum'), ''), 'Ethereum Treasury', 'Default Ethereum treasury wallet'),
-        ('bsc', COALESCE((SELECT value FROM auto_transfer_config WHERE key = 'destination_address_bsc'), ''), 'BSC Treasury', 'Default BSC treasury wallet'),
-        ('tron', COALESCE((SELECT value FROM auto_transfer_config WHERE key = 'destination_address_tron'), ''), 'TRON Treasury', 'Default TRON treasury wallet')`,
+        ('ethereum', '', 'Ethereum Treasury', 'Default Ethereum treasury wallet'),
+        ('bsc', '', 'BSC Treasury', 'Default BSC treasury wallet'),
+        ('tron', '', 'TRON Treasury', 'Default TRON treasury wallet')`,
     ],
     down: [
       `DROP INDEX IF EXISTS idx_treasury_wallets_active`,

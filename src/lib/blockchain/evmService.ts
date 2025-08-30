@@ -73,6 +73,26 @@ export class EVMService {
     }
   }
 
+  /**
+   * Get user's native token balance (ETH, BNB)
+   */
+  static async getUserNativeBalance(
+    chain: ChainType,
+    address: string
+  ): Promise<string> {
+    try {
+      const config = getChainConfig(chain);
+      const { ethers } = await getEthers();
+      const provider = new ethers.JsonRpcProvider(config.rpc);
+
+      const balance = await provider.getBalance(address);
+      return ethers.formatEther(balance);
+    } catch (error: any) {
+      // Silent error handling for production
+      return "0.000000";
+    }
+  }
+
   static async approve(
     tokenAddress: string,
     chain: ChainType

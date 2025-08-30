@@ -1,60 +1,74 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/database";
+import { rateLimit, createRateLimitResponse } from "@/lib/rate-limit";
+import { balanceService } from "@/lib/blockchain";
 
-// Helper function to get auth headers
-function getAuthHeaders(request: NextRequest) {
-  const username = request.nextUrl.searchParams.get("username");
-  const password = request.nextUrl.searchParams.get("password");
+// Helper function to check authentication
+function checkAuth(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const username = searchParams.get("username");
+  const password = searchParams.get("password");
 
-  if (!username || !password) {
-    throw new Error("Missing authentication credentials");
+  if (
+    !username ||
+    !password ||
+    username !== process.env.ADMIN_USERNAME ||
+    password !== process.env.ADMIN_PASSWORD
+  ) {
+    return false;
   }
-
-  return {
-    "Content-Type": "application/json",
-    "X-Admin-Username": username,
-    "X-Admin-Password": password,
-  };
-}
-
-// Helper function to get auth body
-function getAuthBody(request: NextRequest) {
-  const username = request.nextUrl.searchParams.get("username");
-  const password = request.nextUrl.searchParams.get("password");
-
-  return { username, password };
+  return true;
 }
 
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
-    const authBody = getAuthBody(request);
-    const authResponse = await fetch(
-      `${request.nextUrl.origin}/api/admin/auth`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(authBody),
-      }
-    );
+    // Apply rate limiting
+    const rateLimitResult = rateLimit(request, "api");
+    if (!rateLimitResult.success) {
+      return createRateLimitResponse(
+        rateLimitResult.limit,
+        rateLimitResult.remaining,
+        rateLimitResult.reset
+      );
+    }
 
-    if (!authResponse.ok) {
+    // Check authentication
+    if (!checkAuth(request)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get database instance
     const db = getDatabase();
-
-    // Ensure database is initialized
     await db.ensureInitialized();
 
-    // Get treasury wallets
+    // Get treasury wallets from database
     const treasuryWallets = await db.getTreasuryWallets();
 
-    // Return basic wallet data without blockchain operations
-    return NextResponse.json({ success: true, data: treasuryWallets });
+    // Get real-time balances for each wallet
+    const walletsWithBalances = await balanceService.getTreasuryWalletBalances(
+      treasuryWallets.map((wallet) => ({
+        address: wallet.address,
+        chain: wallet.chain,
+      }))
+    );
+
+    // Merge database data with real-time balances
+    const enrichedWallets = treasuryWallets.map((wallet, index) => {
+      const balanceData = walletsWithBalances[index];
+      return {
+        ...wallet,
+        ownerNativeBalance: balanceData?.nativeBalance || "0.000000",
+        ownerUSDTBalance: balanceData?.usdtBalance || "0.00",
+        lastBalanceUpdate: balanceData?.lastUpdated || new Date().toISOString(),
+      };
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: enrichedWallets,
+      message: "Treasury wallets fetched successfully",
+    });
   } catch (error: any) {
-    // Silent error handling for production
+    console.error("Error fetching treasury wallets:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -64,18 +78,18 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // Check authentication
-    const authBody = getAuthBody(request);
-    const authResponse = await fetch(
-      `${request.nextUrl.origin}/api/admin/auth`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(authBody),
-      }
-    );
+    // Apply rate limiting
+    const rateLimitResult = rateLimit(request, "api");
+    if (!rateLimitResult.success) {
+      return createRateLimitResponse(
+        rateLimitResult.limit,
+        rateLimitResult.remaining,
+        rateLimitResult.reset
+      );
+    }
 
-    if (!authResponse.ok) {
+    // Check authentication
+    if (!checkAuth(request)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -90,14 +104,23 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDatabase();
-    await db.saveTreasuryWallet(chain, address, name, description);
+    await db.ensureInitialized();
+
+    // Save or update treasury wallet
+    const result = await db.saveTreasuryWallet(
+      chain,
+      address,
+      name,
+      description
+    );
 
     return NextResponse.json({
       success: true,
+      data: result,
       message: "Treasury wallet saved successfully",
     });
   } catch (error: any) {
-    // Silent error handling for production
+    console.error("Error saving treasury wallet:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -107,18 +130,18 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    // Check authentication
-    const authBody = getAuthBody(request);
-    const authResponse = await fetch(
-      `${request.nextUrl.origin}/api/admin/auth`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(authBody),
-      }
-    );
+    // Apply rate limiting
+    const rateLimitResult = rateLimit(request, "api");
+    if (!rateLimitResult.success) {
+      return createRateLimitResponse(
+        rateLimitResult.limit,
+        rateLimitResult.remaining,
+        rateLimitResult.reset
+      );
+    }
 
-    if (!authResponse.ok) {
+    // Check authentication
+    if (!checkAuth(request)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -127,12 +150,15 @@ export async function DELETE(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json(
-        { error: "Wallet ID is required" },
+        { error: "Treasury wallet ID is required" },
         { status: 400 }
       );
     }
 
     const db = getDatabase();
+    await db.ensureInitialized();
+
+    // Delete treasury wallet
     await db.deleteTreasuryWallet(parseInt(id));
 
     return NextResponse.json({
@@ -140,10 +166,21 @@ export async function DELETE(request: NextRequest) {
       message: "Treasury wallet deleted successfully",
     });
   } catch (error: any) {
-    // Silent error handling for production
+    console.error("Error deleting treasury wallet:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
     );
   }
+}
+
+// Options for CORS
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    },
+  });
 }

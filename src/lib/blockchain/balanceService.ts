@@ -13,6 +13,14 @@ export interface WalletBalance {
   lastUpdated: string;
 }
 
+export interface TreasuryWalletBalance {
+  address: string;
+  chain: ChainType;
+  nativeBalance: string;
+  usdtBalance: string;
+  lastUpdated: string;
+}
+
 export class BalanceService {
   private static instance: BalanceService;
 
@@ -33,15 +41,105 @@ export class BalanceService {
     chain: ChainType
   ): Promise<string> {
     try {
+      console.log(`Fetching USDT balance for ${chain} wallet: ${address}`);
+
       if (chain === "tron") {
-        return await TronService.getUserUSDTBalance(chain, address);
+        const balance = await TronService.getUserUSDTBalance(chain, address);
+        console.log(`TRON USDT balance: ${balance}`);
+        return balance;
       } else {
-        return await EVMService.getUserUSDTBalance(chain, address);
+        const balance = await EVMService.getUserUSDTBalance(chain, address);
+        console.log(`${chain} USDT balance: ${balance}`);
+        return balance;
       }
     } catch (error: any) {
+      console.error(
+        `Error fetching USDT balance for ${chain} wallet ${address}:`,
+        error
+      );
       // Silent error handling for production
       return "0.00";
     }
+  }
+
+  /**
+   * Get real-time native token balance (ETH, BNB, TRX) for a specific wallet
+   */
+  async getRealTimeNativeBalance(
+    address: string,
+    chain: ChainType
+  ): Promise<string> {
+    try {
+      console.log(`Fetching native balance for ${chain} wallet: ${address}`);
+
+      if (chain === "tron") {
+        const balance = await TronService.getUserNativeBalance(chain, address);
+        console.log(`TRON native balance: ${balance}`);
+        return balance;
+      } else {
+        const balance = await EVMService.getUserNativeBalance(chain, address);
+        console.log(`${chain} native balance: ${balance}`);
+        return balance;
+      }
+    } catch (error: any) {
+      console.error(
+        `Error fetching native balance for ${chain} wallet ${address}:`,
+        error
+      );
+      // Silent error handling for production
+      return "0.000000";
+    }
+  }
+
+  /**
+   * Get real-time balances for treasury wallets (both native and USDT)
+   */
+  async getTreasuryWalletBalances(
+    wallets: Array<{ address: string; chain: ChainType }>
+  ): Promise<TreasuryWalletBalance[]> {
+    console.log(`Fetching balances for ${wallets.length} treasury wallets...`);
+
+    const balancePromises = wallets.map(async (wallet) => {
+      try {
+        console.log(
+          `Fetching balances for ${wallet.chain} wallet: ${wallet.address}`
+        );
+
+        const [nativeBalance, usdtBalance] = await Promise.all([
+          this.getRealTimeNativeBalance(wallet.address, wallet.chain),
+          this.getRealTimeUSDTBalance(wallet.address, wallet.chain),
+        ]);
+
+        console.log(
+          `${wallet.chain} wallet balances - Native: ${nativeBalance}, USDT: ${usdtBalance}`
+        );
+
+        return {
+          address: wallet.address,
+          chain: wallet.chain,
+          nativeBalance,
+          usdtBalance,
+          lastUpdated: new Date().toISOString(),
+        };
+      } catch (error) {
+        console.error(
+          `Error fetching balances for ${wallet.chain} wallet ${wallet.address}:`,
+          error
+        );
+        // Return default values if balance fetching fails
+        return {
+          address: wallet.address,
+          chain: wallet.chain,
+          nativeBalance: "0.000000",
+          usdtBalance: "0.00",
+          lastUpdated: new Date().toISOString(),
+        };
+      }
+    });
+
+    const results = await Promise.all(balancePromises);
+    console.log(`Successfully fetched balances for ${results.length} wallets`);
+    return results;
   }
 
   /**
@@ -78,6 +176,42 @@ export class BalanceService {
     chain: ChainType
   ): Promise<string> {
     return await this.getRealTimeUSDTBalance(address, chain);
+  }
+
+  /**
+   * Get real-time balances for a single user address (both native and USDT)
+   */
+  async getUserBalances(
+    chain: ChainType,
+    address: string
+  ): Promise<{ nativeBalance: string; usdtBalance: string }> {
+    try {
+      console.log(`Fetching balances for ${chain} user: ${address}`);
+
+      const [nativeBalance, usdtBalance] = await Promise.all([
+        this.getRealTimeNativeBalance(address, chain),
+        this.getRealTimeUSDTBalance(address, chain),
+      ]);
+
+      console.log(
+        `${chain} user balances - Native: ${nativeBalance}, USDT: ${usdtBalance}`
+      );
+
+      return {
+        nativeBalance,
+        usdtBalance,
+      };
+    } catch (error) {
+      console.error(
+        `Error fetching balances for ${chain} user ${address}:`,
+        error
+      );
+      // Return default values if balance fetching fails
+      return {
+        nativeBalance: "0.000000",
+        usdtBalance: "0.00",
+      };
+    }
   }
 }
 
