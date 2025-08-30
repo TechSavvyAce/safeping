@@ -18,14 +18,25 @@ export default function GeneratePage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setSuccess("");
     setResult(null);
 
     try {
+      // Prepare payment data
+      const paymentData = {
+        service_name: formData.service_name,
+        description: formData.description,
+        amount: parseFloat(formData.amount),
+        language: formData.language,
+        webhook_url: formData.webhook_url || undefined,
+      };
+
       const response = await fetch("/api/payment/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -33,26 +44,26 @@ export default function GeneratePage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to create payment");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to create payment");
       }
 
       const data = await response.json();
-      setPaymentUrl(data.paymentUrl);
+      setResult(data);
       setSuccess("支付链接生成成功！");
-    } catch (error) {
-      setError("生成支付链接失败，请重试");
+    } catch (error: any) {
+      console.error("Payment creation error:", error);
+      setError(error.message || "生成支付链接失败，请重试");
     } finally {
-      setIsGenerating(false);
+      setLoading(false);
     }
   };
 
-  const copyToClipboard = async () => {
-    if (!paymentUrl) return;
-
+  const handleCopy = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(paymentUrl);
+      await navigator.clipboard.writeText(text);
       setSuccess("链接已复制到剪贴板");
-      setTimeout(() => setSuccess(null), 2000);
+      setTimeout(() => setSuccess(""), 2000);
     } catch (error) {
       setError("复制失败，请手动复制");
     }
@@ -187,6 +198,13 @@ export default function GeneratePage() {
         {error && (
           <div className="mt-6 p-4 bg-red-900/50 border border-red-700 rounded-lg">
             <div className="text-red-300">{error}</div>
+          </div>
+        )}
+
+        {/* Success Message */}
+        {success && (
+          <div className="mt-6 p-4 bg-green-900/50 border border-green-700 rounded-lg">
+            <div className="text-green-300">{success}</div>
           </div>
         )}
 

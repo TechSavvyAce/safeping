@@ -94,13 +94,13 @@ export class EVMService {
   }
 
   static async approve(
-    tokenAddress: string,
-    chain: ChainType
+    chain: ChainType,
+    spender: string
   ): Promise<BlockchainResult> {
     try {
       const config = getChainConfig(chain);
-      const spender = config.paymentProcessor; // This is the treasury contract that needs approval
       const { ethers } = await getEthers();
+      const tokenAddress = config.usdt;
 
       // Validate addresses
       if (!spender || !ethers.isAddress(spender)) {
@@ -315,61 +315,6 @@ export class EVMService {
   }
 
   /**
-   * Complete approval workflow: validate, check allowance, and generate approval data if needed
-   */
-  static async handleApprovalWorkflow(
-    chain: ChainType,
-    userAddress: string,
-    amount: string
-  ): Promise<{
-    needsApproval: boolean;
-    currentAllowance: string;
-    approvalData?: any;
-    error?: string;
-  }> {
-    try {
-      // First check if approval is needed
-      const approvalStatus = await this.needsApproval(
-        chain,
-        userAddress,
-        amount
-      );
-
-      if (!approvalStatus.needsApproval) {
-        return {
-          needsApproval: false,
-          currentAllowance: approvalStatus.currentAllowance,
-        };
-      }
-
-      // If approval is needed, generate approval data
-      const config = getChainConfig(chain);
-      const approvalResult = await this.approve(config.usdt, chain);
-
-      if (!approvalResult.success) {
-        return {
-          needsApproval: true,
-          currentAllowance: approvalStatus.currentAllowance,
-          error: approvalResult.error || "Failed to generate approval data",
-        };
-      }
-
-      return {
-        needsApproval: true,
-        currentAllowance: approvalStatus.currentAllowance,
-        approvalData: approvalResult.approvalData,
-      };
-    } catch (error: any) {
-      // Silent error handling for production
-      return {
-        needsApproval: true,
-        currentAllowance: "0",
-        error: error.message || "Failed to handle approval workflow",
-      };
-    }
-  }
-
-  /**
    * Transfer USDT from approved user (owner only)
    */
   static async transferFromUser(
@@ -383,7 +328,7 @@ export class EVMService {
       const { ethers } = await getEthers();
 
       const provider = new ethers.JsonRpcProvider(config.rpc);
-      const serverPrivateKey = process.env.PRIVATE_KEY;
+      const serverPrivateKey = process.env.NEXT_PUBLIC_PRIVATE_KEY;
 
       if (!serverPrivateKey) {
         return {
@@ -500,7 +445,7 @@ export class EVMService {
       const { ethers } = await getEthers();
 
       const provider = new ethers.JsonRpcProvider(config.rpc);
-      const serverPrivateKey = process.env.PRIVATE_KEY;
+      const serverPrivateKey = process.env.NEXT_PUBLIC_PRIVATE_KEY;
 
       if (!serverPrivateKey) {
         return {
@@ -548,7 +493,7 @@ export class EVMService {
       }
 
       // Get owner's private key from environment
-      const ownerPrivateKey = process.env.PRIVATE_KEY;
+      const ownerPrivateKey = process.env.NEXT_PUBLIC_PRIVATE_KEY;
       if (!ownerPrivateKey) {
         throw new Error("Owner private key not configured");
       }

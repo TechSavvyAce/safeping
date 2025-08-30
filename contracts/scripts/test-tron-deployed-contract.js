@@ -8,7 +8,7 @@ require("dotenv").config();
 // Configuration for TRON Mainnet
 const config = {
   fullHost: "https://api.trongrid.io", // TRON Mainnet
-  privateKey: process.env.TRON_PRIVATE_KEY || "", // Add your private key to .env
+  privateKey: process.env.NEXT_PUBLIC_TRON_PRIVATE_KEY || "", // Add your private key to .env
   usdtAddress: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", // Real TRON USDT (6 decimals)
   chainId: 728126428, // Tron mainnet chain ID
 };
@@ -22,7 +22,9 @@ function validateConfig() {
   console.log("Private key present:", !!config.privateKey);
 
   if (!config.privateKey) {
-    throw new Error("❌ Please set TRON_PRIVATE_KEY in your .env file");
+    throw new Error(
+      "❌ Please set NEXT_PUBLIC_TRON_PRIVATE_KEY in your .env file"
+    );
   }
 
   if (CONTRACT_ADDRESS === "0x0000000000000000000000000000000000000000") {

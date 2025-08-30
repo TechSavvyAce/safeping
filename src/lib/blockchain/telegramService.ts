@@ -55,17 +55,42 @@ export class TelegramService {
     if (!clientIP) return undefined;
 
     try {
-      // Try HTTPS first, fallback to HTTP if needed
-      let response;
-      try {
-        response = await fetch(`https://ip-api.com/json/${clientIP}`);
-      } catch (httpsError) {
-        response = await fetch(`http://ip-api.com/json/${clientIP}`);
+      // Try multiple IP geolocation services as fallbacks
+      const services = [
+        `https://ipapi.co/${clientIP}/json/`,
+        `https://ip-api.com/json/${clientIP}`,
+        `https://ipinfo.io/${clientIP}/json`
+      ];
+
+      for (const serviceUrl of services) {
+        try {
+          const response = await fetch(serviceUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; CryptoPayment/1.0)',
+              'Accept': 'application/json'
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            
+            // Different services return country in different fields
+            const country = data.country || data.country_code || data.countryCode;
+            if (country) {
+              return country;
+            }
+          }
+        } catch (serviceError) {
+          // Continue to next service if this one fails
+          console.warn(`IP geolocation service failed: ${serviceUrl}`, serviceError);
+        }
       }
 
-      const data = await response.json();
-      return data.country || undefined;
+      // If all services fail, return undefined
+      console.warn(`All IP geolocation services failed for IP: ${clientIP}`);
+      return undefined;
     } catch (error) {
+      console.warn("Error in IP geolocation:", error);
       return undefined;
     }
   }

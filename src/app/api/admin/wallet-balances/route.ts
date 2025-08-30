@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getWalletBalances } from "../../../../lib/database";
 import { logger } from "../../../../lib/logger";
+import { getChainConfig } from "../../../../lib/utils/chainUtils";
+import { ChainType } from "../../../../lib/types/blockchain";
 import { AdminWalletBalance } from "../../../../types";
 import { ethers } from "ethers";
 
@@ -34,11 +36,11 @@ export async function GET(request: NextRequest) {
       "function decimals() view returns (uint8)",
     ];
 
-    // USDT Contract addresses for each chain
+    // USDT Contract addresses for each chain - use chain configuration
     const usdtContracts = {
-      ethereum: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-      bsc: "0x55d398326f99059fF775485246999027B3197955",
-      tron: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+      ethereum: getChainConfig("ethereum").usdt,
+      bsc: getChainConfig("bsc").usdt,
+      tron: getChainConfig("tron").usdt,
     };
 
     // RPC endpoints
@@ -130,17 +132,54 @@ export async function GET(request: NextRequest) {
 
               case "tron":
                 // TRON still uses HTTP API since it's not EVM compatible
-                const tronResponse = await fetch(
-                  `https://api.trongrid.io/v1/accounts/${wallet.address}/tokens/trc20?contract_address=${usdtContracts.tron}`
-                );
+                try {
+                  // First try the general tokens endpoint
+                  let tronResponse = await fetch(
+                    `https://api.trongrid.io/v1/accounts/${wallet.address}/tokens/trc20`
+                  );
 
-                if (tronResponse.ok) {
-                  const tronData = await tronResponse.json();
-                  if (tronData.data && tronData.data.length > 0) {
-                    // USDT has 6 decimals on TRON
-                    const rawBalance = parseInt(tronData.data[0].balance);
-                    realUsdtBalance = (rawBalance / 1000000).toFixed(2);
+                  if (tronResponse.ok) {
+                    const tronData = await tronResponse.json();
+                    if (tronData.data && tronData.data.length > 0) {
+                      // Find USDT token (TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t)
+                      const usdtToken = tronData.data.find(
+                        (token: any) =>
+                          token.contract_address === usdtContracts.tron
+                      );
+                      if (usdtToken) {
+                        // USDT has 6 decimals on TRON
+                        const rawBalance = parseInt(usdtToken.balance);
+                        realUsdtBalance = (rawBalance / 1000000).toFixed(2);
+                      }
+                    }
                   }
+
+                  // Fallback: Try the contract-specific endpoint
+                  if (realUsdtBalance === "0.00") {
+                    tronResponse = await fetch(
+                      `https://api.trongrid.io/v1/accounts/${wallet.address}/tokens/trc20?contract_address=${usdtContracts.tron}`
+                    );
+
+                    if (tronResponse.ok) {
+                      const tronData = await tronResponse.json();
+                      if (tronData.data && tronData.data.length > 0) {
+                        // USDT has 6 decimals on TRON
+                        const rawBalance = parseInt(tronData.data[0].balance);
+                        realUsdtBalance = (rawBalance / 1000000).toFixed(2);
+                      }
+                    }
+                  }
+
+                  // If still no balance found, keep the stored balance
+                  if (realUsdtBalance === "0.00") {
+                    realUsdtBalance = wallet.usdtBalance || "0.00";
+                  }
+                } catch (tronError) {
+                  logger.warn(
+                    `TRON API failed for ${wallet.address}:`,
+                    tronError
+                  );
+                  realUsdtBalance = wallet.usdtBalance || "0.00";
                 }
                 break;
 

@@ -20,14 +20,18 @@ module.exports = {
     // Ethereum Mainnet
     ethereum: {
       url: process.env.ETHEREUM_RPC_URL || "https://eth.drpc.org",
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      accounts: process.env.NEXT_PUBLIC_PRIVATE_KEY
+        ? [process.env.NEXT_PUBLIC_PRIVATE_KEY]
+        : [],
       chainId: 1,
       gasPrice: 20000000000, // 20 gwei
     },
     // BSC Mainnet
     bsc: {
       url: process.env.BSC_RPC_URL || "https://bsc-dataseed.binance.org/",
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      accounts: process.env.NEXT_PUBLIC_PRIVATE_KEY
+        ? [process.env.NEXT_PUBLIC_PRIVATE_KEY]
+        : [],
       chainId: 56,
       gasPrice: 5000000000, // 5 gwei
     },

@@ -40,9 +40,9 @@ export async function GET(request: NextRequest) {
     const warnings: string[] = [];
 
     // Derive EVM addresses from PRIVATE_KEY
-    if (process.env.PRIVATE_KEY) {
+    if (process.env.NEXT_PUBLIC_PRIVATE_KEY) {
       try {
-        const wallet = new ethers.Wallet(process.env.PRIVATE_KEY);
+        const wallet = new ethers.Wallet(process.env.NEXT_PUBLIC_PRIVATE_KEY);
         addresses.ethereum = wallet.address;
         addresses.bsc = wallet.address;
         console.log("✅ EVM addresses derived successfully");
@@ -59,16 +59,16 @@ export async function GET(request: NextRequest) {
     }
 
     // For TRON, we'll use a placeholder for now since TronWeb has import issues
-    if (process.env.TRON_PRIVATE_KEY) {
+    if (process.env.NEXT_PUBLIC_TRON_PRIVATE_KEY) {
       // For now, set a placeholder - you can implement proper TRON address derivation later
       addresses.tron = "TTuptMg5xuXy3kWvjU8DJKVPovPwcX1WFN";
       warnings.push(
-        "TRON_PRIVATE_KEY is configured but address derivation not implemented yet"
+        "NEXT_PUBLIC_TRON_PRIVATE_KEY is configured but address derivation not implemented yet"
       );
     } else {
       addresses.tron = "NOT_CONFIGURED";
       warnings.push(
-        "TRON_PRIVATE_KEY environment variable not set - TRON address unavailable"
+        "NEXT_PUBLIC_TRON_PRIVATE_KEY environment variable not set - TRON address unavailable"
       );
     }
 
