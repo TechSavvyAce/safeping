@@ -42,7 +42,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Get database instance
     const db = getDatabase();
+
+    // Ensure database is initialized
+    await db.ensureInitialized();
+
+    // Get treasury wallets
     const treasuryWallets = await db.getTreasuryWallets();
 
     // Return basic wallet data without blockchain operations
